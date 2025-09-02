@@ -63,4 +63,4 @@ axes[0].imshow(img); axes[0].set_title("Original Blue Noise"); axes[0].axis("off
 axes[1].imshow(img_inverted); axes[1].set_title("Inverted Mask"); axes[1].axis("off")
 axes[2].imshow(result); axes[2].set_title("Stable Diffusion Result"); axes[2].axis("off")
 plt.show()
-plt.savefig("blue_noise_inversion_results.png")
+plt.savefig("blue_noise_controlnet_result.png")
