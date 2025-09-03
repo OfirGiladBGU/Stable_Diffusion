@@ -29,16 +29,8 @@ import matplotlib.pyplot as plt
 # ---------------------------
 # Utilities & core primitives
 # ---------------------------
-
-def _pick_device(device: str | None = None) -> str:
-    """Pick CUDA if available unless explicitly requested otherwise."""
-    if device is not None:
-        return device
-    return "cuda" if torch.cuda.is_available() else "cpu"
-
-
 @torch.no_grad()
-def _make_jittered_grid(n_points: int, oversample: float, device: str) -> torch.Tensor:
+def _make_jittered_grid(n_points: int, oversample: float) -> torch.Tensor:
     """
     Stratified jittered grid in [0,1]^2.
     Generates M = ceil(n_points * oversample) points, then shuffles.
@@ -62,7 +54,7 @@ def _make_jittered_grid(n_points: int, oversample: float, device: str) -> torch.
 
 
 @torch.no_grad()
-def _eval_density_on_grid(res: int, density_fn, device: str) -> torch.Tensor:
+def _eval_density_on_grid(res: int, density_fn) -> torch.Tensor:
     """
     Evaluate a user-supplied density function ρ(u,v) over a res×res grid on [0,1]^2.
 
@@ -121,8 +113,6 @@ def sample_blue_noise_density(
     n_points: int = 3000,
     density_fn = None,            # required: lambda U,V → ρ(U,V) on [0,1]^2
     oversample: float = 2.0,       # >1 gives a richer stratified pool to select from
-    device: str | None = None,
-    seed: int | None = None,
     plot: bool = True
 ):
     """
@@ -143,10 +133,6 @@ def sample_blue_noise_density(
             rho_radial   = lambda U,V: (1.0 - torch.sqrt((U-0.5)**2 + (V-0.5)**2)/0.7071).clamp(min=0.0)
     oversample : float
         Factor for stratified pool size (M ≈ n_points * oversample). Higher → better spacing fidelity.
-    device : str | None
-        "cuda" or "cpu"; if None, auto-selects CUDA if available.
-    seed : int | None
-        RNG seed for reproducibility.
     plot : bool
         If True, render side-by-side: density (grayscale) and sampled points.
 
@@ -157,17 +143,11 @@ def sample_blue_noise_density(
     """
     assert callable(density_fn), "Please provide a density_fn: lambda U,V → rho(U,V)."
 
-    device = _pick_device(device)
-    if seed is not None:
-        torch.manual_seed(seed)
-        if device == "cuda":
-            torch.cuda.manual_seed_all(seed)
-
     # 1) Evaluate the density on a grid (for visualization) and normalize.
-    rho_grid = _eval_density_on_grid(res, density_fn, device=device)  # (res,res), sum=1
+    rho_grid = _eval_density_on_grid(res, density_fn)  # (res,res), sum=1
 
     # 2) Build a stratified candidate pool (quasi-blue-noise uniform in [0,1]^2).
-    pool_uv = _make_jittered_grid(n_points=n_points, oversample=oversample, device=device)  # (M,2)
+    pool_uv = _make_jittered_grid(n_points=n_points, oversample=oversample)  # (M,2)
 
     # 3) Compute normalized weights at pool samples according to the density.
     w = _eval_density_on_points(pool_uv, density_fn)  # (M,), sum=1
@@ -201,7 +181,6 @@ def sample_blue_noise_density(
         plt.tight_layout()
         plt.show()
 
-
     return coords
 
 
@@ -212,8 +191,6 @@ def cc_lloyd_relaxation_wrapper(
     res=512,
     n_points=3000,
     iters=5,
-    device=None,
-    seed=None,
     plot=True
 ):
     """
@@ -232,10 +209,6 @@ def cc_lloyd_relaxation_wrapper(
         Number of points.
     iters : int
         Number of CC Lloyd iterations.
-    device : str or None
-        "cuda" or "cpu"; auto-selects CUDA if available.
-    seed : int or None
-        RNG seed.
     plot : bool
         If True, show before/after scatter side-by-side.
 
@@ -244,16 +217,10 @@ def cc_lloyd_relaxation_wrapper(
     coords_relaxed : torch.Tensor
         (n_points,2) final relaxed coordinates on CPU.
     """
-    device = "cuda" if (device is None and torch.cuda.is_available()) else "cpu"
-    if seed is not None:
-        torch.manual_seed(seed)
-        if device == "cuda":
-            torch.cuda.manual_seed_all(seed)
-
     # 1. Generate initial samples with base sampler
     coords0 = base_sampler(res=res, n_points=n_points,
-                           density_fn=density_fn, device=device,
-                           seed=seed, plot=False).float().to(device)
+                           density_fn=density_fn, 
+                           plot=False).float().to(device)
 
     coords = coords0.clone()
 
@@ -316,8 +283,6 @@ def cc_lloyd_multires_wrapper(
     out_res=512,
     iters_per_level=(2,1),  # (coarse_iters, fine_iters)
     levels=(128, 512),      # grid resolutions to use progressively
-    device=None,
-    seed=None,
     plot=True
 ):
     """
@@ -338,10 +303,6 @@ def cc_lloyd_multires_wrapper(
         Number of Lloyd iterations at each level.
     levels : tuple(int,int)
         Grid resolutions (coarse → fine).
-    device : str or None
-        "cuda" or "cpu"; auto-selects CUDA if available.
-    seed : int or None
-        RNG seed.
     plot : bool
         If True, scatter before/after.
 
@@ -349,16 +310,10 @@ def cc_lloyd_multires_wrapper(
     -------
     coords_relaxed : (n_points,2) tensor on CPU
     """
-    device = "cuda" if (device is None and torch.cuda.is_available()) else "cpu"
-    if seed is not None:
-        torch.manual_seed(seed)
-        if device == "cuda":
-            torch.cuda.manual_seed_all(seed)
-
     # Initial points
     coords0 = base_sampler(res=out_res, n_points=n_points,
-                           density_fn=density_fn, device=device,
-                           seed=seed, plot=False).float().to(device)
+                           density_fn=density_fn, 
+                           plot=False).float().to(device)
     coords = coords0.clone()
 
     # Progressive Lloyd iterations
@@ -406,6 +361,14 @@ def cc_lloyd_multires_wrapper(
 # Example usage
 # ---------------------------
 if __name__ == "__main__":
+    # Set CUDA parameters
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    seed = 42
+    if seed is not None:
+        torch.manual_seed(seed)
+        if device == "cuda":
+            torch.cuda.manual_seed_all(seed)
+
     # Example density: linear ramp left→right
     rho_linear = lambda U, V: U
 
@@ -417,8 +380,6 @@ if __name__ == "__main__":
         out_res=512,
         iters_per_level=(9, 1),  # 2 iterations on coarse grid, 1 on fine grid
         levels=(512, 512),       # first 128² grid, then refine at 512²
-        device=None,             # auto-select CUDA if available
-        seed=42,
         plot=True                # show before/after scatter
     )
 
