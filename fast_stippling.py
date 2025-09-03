@@ -98,7 +98,8 @@ def sample_blue_noise_density(
     n_points: int = 3000,
     density_fn = None,
     oversample: float = 2.0,
-    plot: bool = True
+    plot: bool = True,
+    fig_name: str = None
 ) -> torch.Tensor:
     """
     High-performance, GPU-parallel sampling of n_points distributed according to ρ(u,v),
@@ -121,7 +122,7 @@ def sample_blue_noise_density(
             coords, 
             res, 
             n_points, 
-            "StipplingSampler.png"
+            fig_name
         )
     return coords
 
@@ -133,7 +134,8 @@ def cc_lloyd_relaxation_wrapper(
     out_res: int = 512,
     n_points: int = 3000,
     iters: int = 5,
-    plot: bool = True
+    plot: bool = True,
+    fig_name: str = None
 ) -> torch.Tensor:
     """
     Wraps an existing blue-noise sampler with capacity-constrained Lloyd relaxation.
@@ -169,7 +171,7 @@ def cc_lloyd_relaxation_wrapper(
             out_res, 
             n_points, 
             iters, 
-            "FastStipplingV1.png"
+            fig_name
         )
     return coords_relaxed
 
@@ -182,7 +184,8 @@ def cc_lloyd_multires_wrapper(
     out_res: int = 512,
     iters_per_level = (2, 1),
     levels = (128, 512),
-    plot: bool = True
+    plot: bool = True,
+    fig_name: str = None
 ) -> torch.Tensor:
     """
     Multi-resolution capacity-constrained Lloyd relaxation (discretized).
@@ -273,28 +276,33 @@ def _plot_density_samples_relaxed(rho_grid, coords0, coords_relaxed, res, n_poin
 
 # --- Examples ---
 def example1():
-     _ = sample_blue_noise_density(
+    fig_name = "StipplingSampler.png"
+    _ = sample_blue_noise_density(
         res=512,
         n_points=4000,
         density_fn=rho_linear,
         oversample=2.0,
-        plot=True
+        plot=True,
+        fig_name=fig_name
     )
 
 
 def example2():
+    fig_name = "FastStipplingV1.png"
     coords_relaxed = cc_lloyd_relaxation_wrapper(
         base_sampler=sample_blue_noise_density,
         density_fn=rho_linear,
         out_res=512,
         n_points=4000,
         iters=10,
-        plot=True
+        plot=True,
+        fig_name=fig_name
     )
     print("Final relaxed coords shape:", coords_relaxed.shape)
 
 
 def example3():
+    fig_name = "FastStipplingV2.png"
     coords_relaxed = cc_lloyd_multires_wrapper(
         base_sampler=sample_blue_noise_density,
         density_fn=rho_linear,
@@ -302,7 +310,8 @@ def example3():
         out_res=512,
         iters_per_level=(9, 1),
         levels=(512, 512),
-        plot=True
+        plot=True,
+        fig_name=fig_name
     )
     print("Final relaxed coords shape:", coords_relaxed.shape)
 
