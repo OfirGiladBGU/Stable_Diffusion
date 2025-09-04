@@ -52,7 +52,7 @@ def _make_jittered_grid(n_points: int, oversample: float) -> torch.Tensor:
 
 
 @torch.no_grad()
-def _eval_density_on_grid(res: int, density_fn) -> torch.Tensor:
+def _eval_density_on_grid(res: int, density_fn) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Evaluate a user-supplied density function ρ(u,v) over a res×res grid on [0,1]^2.
 
@@ -64,7 +64,8 @@ def _eval_density_on_grid(res: int, density_fn) -> torch.Tensor:
     ys = torch.linspace(0.0, 1.0, res, device=device)
     U, V = torch.meshgrid(xs, ys, indexing="xy")
     rho = torch.clamp(density_fn(U, V), min=0.0)
-    return rho / (rho.sum() + 1e-12)
+    rho_normalized = rho / (rho.sum() + 1e-12)
+    return U, V, rho_normalized
 
 
 @torch.no_grad()
@@ -75,7 +76,8 @@ def _eval_density_on_points(pts_uv: torch.Tensor, density_fn) -> torch.Tensor:
     Returns: (N,) nonnegative, normalized weights (sum=1).
     """
     w = torch.clamp(density_fn(pts_uv[:, 0], pts_uv[:, 1]), min=0.0)
-    return w / (w.sum() + 1e-12)
+    w_normalized = w / (w.sum() + 1e-12)
+    return w_normalized
 
 
 @torch.no_grad()
@@ -89,7 +91,8 @@ def _gumbel_topk_sample_without_replacement(weights: torch.Tensor, k: int) -> to
     # logw + Gumbel noise → top-k
     logw = torch.log(weights + 1e-20)
     g = -torch.log(-torch.log(torch.rand_like(logw) + 1e-20) + 1e-20)
-    return torch.topk(logw + g, k=k, largest=True).indices
+    g_indices = torch.topk(logw + g, k=k, largest=True).indices
+    return g_indices    
 
 
 @torch.no_grad()
@@ -100,7 +103,7 @@ def sample_blue_noise_density(
     oversample: float = 2.0,
     plot: bool = True,
     fig_name: str = None
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     High-performance, GPU-parallel sampling of n_points distributed according to ρ(u,v),
     while preserving good spacing via stratified jittered grid + Gumbel-Top-K selection.
@@ -111,11 +114,11 @@ def sample_blue_noise_density(
         Integer pixel coordinates (x,y) in [0, res-1].
     """
     assert callable(density_fn), "Please provide a density_fn: lambda U,V → rho(U,V)."
-    rho_grid = _eval_density_on_grid(res, density_fn)
+    U, V, rho_grid = _eval_density_on_grid(res, density_fn)
     pool_uv = _make_jittered_grid(n_points, oversample)
     w = _eval_density_on_points(pool_uv, density_fn)
     pts_uv = pool_uv[_gumbel_topk_sample_without_replacement(w, n_points)]
-    coords = (pts_uv * res).clamp(0, res - 1 - 1e-6).floor().to(torch.int32).cpu()
+    coords = (pts_uv * res).clamp(0, res - 1 - 1e-6).floor().to(torch.int32)
     if plot:
         _plot_density_and_points(
             rho_grid, 
@@ -124,7 +127,7 @@ def sample_blue_noise_density(
             n_points, 
             fig_name
         )
-    return coords
+    return (U, V, rho_grid, coords)
 
 
 @torch.no_grad()
@@ -145,18 +148,15 @@ def cc_lloyd_relaxation_wrapper(
     coords_relaxed : torch.Tensor
         (n_points,2) final relaxed coordinates on CPU.
     """
-    coords0 = base_sampler(res=out_res, n_points=n_points, density_fn=density_fn, plot=False).float().to(device)
-    coords = coords0.clone()
-    xs = torch.linspace(0, 1, out_res, device=device)
-    ys = torch.linspace(0, 1, out_res, device=device)
-    U, V = torch.meshgrid(xs, ys, indexing="xy")
-    rho = torch.clamp(density_fn(U, V), min=0.0)
-    rho = rho / (rho.sum() + 1e-12)
+    U, V, rho_grid, coords0 = base_sampler(
+        res=out_res, n_points=n_points, density_fn=density_fn, plot=False
+    )
+    coords = coords0.clone().float().to(device)
     grid = torch.stack([U*out_res, V*out_res], dim=-1)
     for _ in range(iters):
         d2 = torch.cdist(grid.view(-1,2), coords)
         assign = d2.argmin(dim=1)
-        rho_flat = rho.view(-1)
+        rho_flat = rho_grid.view(-1)
         num = torch.zeros((n_points,2), device=device)
         den = torch.zeros((n_points,), device=device)
         num.index_add_(0, assign, grid.view(-1,2) * rho_flat[:,None])
@@ -165,7 +165,7 @@ def cc_lloyd_relaxation_wrapper(
     coords_relaxed = coords.cpu()
     if plot:
         _plot_density_samples_relaxed(
-            rho, 
+            rho_grid, 
             coords0, 
             coords_relaxed, 
             out_res, 
@@ -195,15 +195,12 @@ def cc_lloyd_multires_wrapper(
     -------
     coords_relaxed : (n_points,2) tensor on CPU
     """
-    coords0 = base_sampler(res=out_res, n_points=n_points, density_fn=density_fn, plot=False).float().to(device)
-    coords = coords0.clone()
+    U, V, rho_grid, coords0 = base_sampler(
+        res=out_res, n_points=n_points, density_fn=density_fn, plot=False
+    )
+    coords = coords0.clone().float().to(device)
+    rho_flat = rho_grid.view(-1)
     for level_res, n_iter in zip(levels, iters_per_level):
-        xs = torch.linspace(0, 1, level_res, device=device)
-        ys = torch.linspace(0, 1, level_res, device=device)
-        U, V = torch.meshgrid(xs, ys, indexing="xy")
-        rho = torch.clamp(density_fn(U, V), min=0.0)
-        rho = rho / (rho.sum() + 1e-12)
-        rho_flat = rho.view(-1)
         pixels = torch.stack([U*level_res, V*level_res], dim=-1).view(-1,2)
         for _ in range(n_iter):
             d2 = torch.cdist(pixels, coords)
@@ -216,13 +213,13 @@ def cc_lloyd_multires_wrapper(
     coords_relaxed = (coords / levels[-1] * out_res).clamp(0, out_res-1).cpu()
     if plot:
         _plot_density_samples_relaxed(
-            rho, 
+            rho_grid, 
             coords0, 
             coords_relaxed, 
             out_res, 
             n_points, 
             iters_per_level, 
-            "FastStipplingV2.png"
+            fig_name
         )
     return coords_relaxed
 
@@ -230,13 +227,14 @@ def cc_lloyd_multires_wrapper(
 # --- Plotting helpers ---
 def _plot_density_and_points(rho_grid, coords, res, n_points, fig_name):
     rho_grid_cpu = rho_grid.detach().cpu()
-    rho_img = (rho_grid_cpu / (rho_grid_cpu.max() + 1e-12)).float()
+    rho_grid_cpu = (rho_grid_cpu / (rho_grid_cpu.max() + 1e-12)).float()
+    coords_cpu = coords.detach().cpu()
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    axes[0].imshow(rho_img.numpy(), cmap="gray", origin="upper", vmin=0.0, vmax=1.0)
+    axes[0].imshow(rho_grid_cpu.numpy(), cmap="gray", origin="upper", vmin=0.0, vmax=1.0)
     axes[0].set_title("Density (grayscale)")
     axes[0].axis("off")
     # axes[1].imshow(torch.ones((res, res)), cmap="gray", origin="upper")
-    axes[1].scatter(coords[:,0], coords[:,1], s=2, c="black", marker=".")
+    axes[1].scatter(coords_cpu[:,0], coords_cpu[:,1], s=2, c="black", marker=".")
     axes[1].set_title(f"Initial samples ({n_points} points)")
     axes[1].set_xlim(0,res); axes[1].set_ylim(res,0); axes[1].axis("off")
     plt.tight_layout()
@@ -253,15 +251,16 @@ def _plot_density_samples_relaxed(rho_grid, coords0, coords_relaxed, res, n_poin
     3. CC Lloyd relaxed
     """
     rho_grid_cpu = rho_grid.detach().cpu()
-    rho_img = (rho_grid_cpu / (rho_grid_cpu.max() + 1e-12)).float()
+    rho_grid_cpu = (rho_grid_cpu / (rho_grid_cpu.max() + 1e-12)).float()
+    coords0_cpu = coords0.detach().cpu()
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     # Density (Grayscale)
-    axes[0].imshow(rho_img.numpy(), cmap="gray", origin="upper", vmin=0.0, vmax=1.0)
+    axes[0].imshow(rho_grid_cpu.numpy(), cmap="gray", origin="upper", vmin=0.0, vmax=1.0)
     axes[0].set_title("Density (grayscale)")
     axes[0].axis("off")
     # Initial samples
     # axes[1].imshow(rho_img.numpy(), cmap="gray", origin="upper", vmin=0.0, vmax=1.0)
-    axes[1].scatter(coords0[:,0].cpu(), coords0[:,1].cpu(), s=2, c="black", marker=".")
+    axes[1].scatter(coords0_cpu[:,0], coords0_cpu[:,1], s=2, c="black", marker=".")
     axes[1].set_title(f"Initial samples ({n_points} points)")
     axes[1].set_xlim(0,res); axes[1].set_ylim(res,0); axes[1].axis("off")
     # CC Lloyd relaxed
@@ -319,6 +318,7 @@ def example3():
 if __name__ == "__main__":
     # Set CUDA parameters
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    # seed = 12345
     seed = 42
     torch.manual_seed(seed)
     if device == "cuda":
