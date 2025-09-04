@@ -27,6 +27,7 @@ import torch
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
+from tqdm import tqdm
 
 
 # --- Core Logic ---
@@ -134,11 +135,15 @@ def sample_blue_noise_density(
 
 # --- Image-based Initial Sampler Class ---
 class ImageBasedSampler:
-    def __init__(self, folder_path):
+    def __init__(self, folder_path, dataset_paths=None):
         self.folder_path = folder_path
         self.image_files = [f for f in os.listdir(folder_path) if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff"))]
         self.image_files.sort(key=lambda x: int(x.split('.')[0]))
         self.idx = 0
+
+        # Used for Dataset Export
+        self.dataset_paths = dataset_paths
+        self.json_data = []
 
     def __call__(self, res=512, n_points=3000, density_fn=None, oversample=2.0, plot=True, fig_name=None):
         if self.idx >= len(self.image_files):
@@ -170,6 +175,39 @@ class ImageBasedSampler:
             fig_name=fig_name
         )
 
+    def export_sample(self, rho_grid, coords_relaxed, res):
+        rho_grid_cpu = rho_grid.detach().cpu()
+        rho_grid_cpu = (rho_grid_cpu / (rho_grid_cpu.max() + 1e-12)).float()
+        rho_grid_cpu = (rho_grid_cpu * 255).to(torch.uint8).numpy()
+
+        # Listen! The coords_relaxed are x and y coordinates of the points
+        # We need to create white image with black points, and then resize to res x res
+        # coords_relaxed is float tensor, convert to integer pixel coordinates
+        coords_relaxed_cpu = coords_relaxed.detach().cpu()
+        coords_relaxed_indices = (coords_relaxed_cpu).clamp(0, res - 1 - 1e-6).floor().to(torch.int32)
+        stipple_img = torch.ones((res, res), dtype=torch.float32)
+        stipple_img[coords_relaxed_indices[:,1], coords_relaxed_indices[:,0]] = 0.0  # Set points to black
+        coords_relaxed_cpu = (stipple_img * 255).to(torch.uint8).numpy()
+
+        image_base_name = os.path.basename(self.image_files[self.idx - 1])
+        Image.fromarray(rho_grid_cpu).save(
+            os.path.join(self.dataset_paths['source_path'], image_base_name)
+        )
+        Image.fromarray(coords_relaxed_cpu).save(
+            os.path.join(self.dataset_paths['target_path'], image_base_name)
+        )
+        self.json_data.append({
+            "source": f"source/{image_base_name}",
+            "target": f"target/{image_base_name}",
+            "prompt": f"Stippling"
+        })
+
+    def export_json(self):
+        with open(self.dataset_paths['json_path'], 'w') as f:
+            for item in self.json_data:
+                data_line = str(item).replace("\'", "\"")
+                f.write(f"{data_line}\n")
+
 
 @torch.no_grad()
 def cc_lloyd_relaxation_wrapper(
@@ -179,7 +217,8 @@ def cc_lloyd_relaxation_wrapper(
     n_points: int = 3000,
     iters: int = 5,
     plot: bool = True,
-    fig_name: str = None
+    fig_name: str = None,
+    debug: bool = True
 ) -> torch.Tensor:
     """
     Wraps an existing blue-noise sampler with capacity-constrained Lloyd relaxation.
@@ -203,17 +242,20 @@ def cc_lloyd_relaxation_wrapper(
         num.index_add_(0, assign, grid.view(-1,2) * rho_flat[:,None])
         den.index_add_(0, assign, rho_flat)
         coords = num / (den[:,None] + 1e-12)
-    coords_relaxed = coords.cpu()
-    if plot:
-        _plot_density_samples_relaxed(
-            rho_grid, 
-            coords0, 
-            coords_relaxed, 
-            out_res, 
-            n_points, 
-            iters, 
-            fig_name
-        )
+    coords_relaxed = coords
+    if debug:
+        if plot:
+            _plot_density_samples_relaxed(
+                rho_grid, 
+                coords0, 
+                coords_relaxed, 
+                out_res, 
+                n_points, 
+                iters, 
+                fig_name
+            )
+    else:
+        base_sampler.export_sample(rho_grid, coords_relaxed, out_res)
     return coords_relaxed
 
 
@@ -226,7 +268,8 @@ def cc_lloyd_multires_wrapper(
     iters_per_level = (2, 1),
     levels = (128, 512),
     plot: bool = True,
-    fig_name: str = None
+    fig_name: str = None,
+    debug: bool = True
 ) -> torch.Tensor:
     """
     Multi-resolution capacity-constrained Lloyd relaxation (discretized).
@@ -251,17 +294,21 @@ def cc_lloyd_multires_wrapper(
             num.index_add_(0, assign, pixels * rho_flat[:,None])
             den.index_add_(0, assign, rho_flat)
             coords = num / (den[:,None] + 1e-12)
-    coords_relaxed = (coords / levels[-1] * out_res).clamp(0, out_res-1).cpu()
-    if plot:
-        _plot_density_samples_relaxed(
-            rho_grid, 
-            coords0, 
-            coords_relaxed, 
-            out_res, 
-            n_points, 
-            iters_per_level, 
-            fig_name
-        )
+    coords_relaxed = (coords / levels[-1] * out_res).clamp(0, out_res-1)
+    if debug:
+        if plot:
+            _plot_density_samples_relaxed(
+                rho_grid, 
+                coords0, 
+                coords_relaxed, 
+                out_res, 
+                n_points, 
+                iters_per_level, 
+                fig_name
+            )
+    else:
+        base_sampler.export_sample(rho_grid, coords_relaxed, out_res)
+    
     return coords_relaxed
 
 # --- Plotting helpers ---
@@ -269,6 +316,7 @@ def _plot_density_and_points(rho_grid, coords, res, n_points, fig_name):
     rho_grid_cpu = rho_grid.detach().cpu()
     rho_grid_cpu = (rho_grid_cpu / (rho_grid_cpu.max() + 1e-12)).float()
     coords_cpu = coords.detach().cpu()
+    
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     axes[0].imshow(rho_grid_cpu.numpy(), cmap="gray", origin="upper", vmin=0.0, vmax=1.0)
     axes[0].set_title("Density (grayscale)")
@@ -292,6 +340,8 @@ def _plot_density_samples_relaxed(rho_grid, coords0, coords_relaxed, res, n_poin
     rho_grid_cpu = rho_grid.detach().cpu()
     rho_grid_cpu = (rho_grid_cpu / (rho_grid_cpu.max() + 1e-12)).float()
     coords0_cpu = coords0.detach().cpu()
+    coords_relaxed_cpu = coords_relaxed.detach().cpu()
+
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     # Density (Grayscale)
     axes[0].imshow(rho_grid_cpu.numpy(), cmap="gray", origin="upper", vmin=0.0, vmax=1.0)
@@ -304,7 +354,7 @@ def _plot_density_samples_relaxed(rho_grid, coords0, coords_relaxed, res, n_poin
     axes[1].set_xlim(0,res); axes[1].set_ylim(res,0); axes[1].axis("off")
     # CC Lloyd relaxed
     # axes[2].imshow(rho_img.numpy(), cmap="gray", origin="upper", vmin=0.0, vmax=1.0)
-    axes[2].scatter(coords_relaxed[:,0], coords_relaxed[:,1], s=2, c="black", marker=".")
+    axes[2].scatter(coords_relaxed_cpu[:,0], coords_relaxed_cpu[:,1], s=2, c="black", marker=".")
     axes[2].set_title(f"CC Lloyd relaxed ({iters} iters)")
     axes[2].set_xlim(0,res); axes[2].set_ylim(res,0); axes[2].axis("off")
     plt.tight_layout()
@@ -316,25 +366,19 @@ def _plot_density_samples_relaxed(rho_grid, coords0, coords_relaxed, res, n_poin
 def generate_stippling_dataset(
     N: int,
     base_sampler = None,
-    output_dir: str = "output"
+    output_dir: str = "output",
+    debug: bool = True
 ):
     """
     Generate N stippling images using sample_blue_noise_density, saving each to output_dir.
     Each image uses a randomly generated density function (random grayscale map).
     """
-    import os
-    import random
-    import numpy as np
     os.makedirs(output_dir, exist_ok=True)
-    for i in range(N):
-        seed = i
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
-        np.random.seed(seed)
-        random.seed(seed)
-
-        img_path = os.path.join(output_dir, f"stippling_{i:04d}.png")
+    if N == -1:
+        N = len(base_sampler.image_files)
+    for i in tqdm(range(N)):
+        input_base_name = os.path.basename(base_sampler.image_files[i])
+        img_path = os.path.join(output_dir,input_base_name)
         cc_lloyd_multires_wrapper(
             base_sampler=base_sampler,
             density_fn=rho_linear,
@@ -343,8 +387,11 @@ def generate_stippling_dataset(
             iters_per_level=(9, 1),
             levels=(512, 512),
             plot=True,
-            fig_name=img_path
+            fig_name=img_path,
+            debug=debug
         )
+    if not debug:
+        base_sampler.export_json()
 
 
 # --- Examples ---
@@ -389,7 +436,42 @@ def example3():
     print("Final relaxed coords shape:", coords_relaxed.shape)
 
 
+def debug_dataset_generator():
+    img_sampler = ImageBasedSampler(
+        folder_path=os.path.join(ROOT_PATH, "data", "original")
+    )
+    generate_stippling_dataset(
+        N=10,
+        base_sampler=img_sampler,
+        output_dir=os.path.join(ROOT_PATH, "output"),
+        debug=True
+    )
+
+
+def true_dataset_generator():
+    dataset_paths = dict(
+        source_path=os.path.join(ROOT_PATH, "data", "source"),
+        target_path=os.path.join(ROOT_PATH, "data", "target"),
+        json_path=os.path.join(ROOT_PATH, "data", "prompt.json")
+    )
+    os.makedirs(os.path.dirname(dataset_paths['json_path']), exist_ok=True)
+    os.makedirs(dataset_paths['source_path'], exist_ok=True)
+    os.makedirs(dataset_paths['target_path'], exist_ok=True)
+
+    img_sampler = ImageBasedSampler(
+        folder_path=os.path.join(ROOT_PATH, "data", "original"),
+        dataset_paths=dataset_paths
+    )
+    generate_stippling_dataset(
+        N=10,
+        base_sampler=img_sampler,
+        output_dir=os.path.join(ROOT_PATH, "data"),
+        debug=False
+    )
+
+
 if __name__ == "__main__":
+    ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
     # Set CUDA parameters
     device = "cuda" if torch.cuda.is_available() else "cpu"
     seed = 42
@@ -401,18 +483,11 @@ if __name__ == "__main__":
     rho_linear = lambda U, V: U
     # rho_vertical_quad = lambda U, V: V**2
     # rho_radial = lambda U, V: (1.0 - torch.sqrt((U-0.5)**2 + (V-0.5)**2) / 0.7071).clamp(min=0.0)
-    
-    # Generate stippling dataset with your images
-    ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
-    img_sampler = ImageBasedSampler(
-        folder_path=os.path.join(ROOT_PATH, "data", "target")
-    )
-    generate_stippling_dataset(
-        N=10,
-        base_sampler=img_sampler,
-        output_dir="output"
-    )
 
     # example1()
     # example2()
     # example3()
+
+    # Generate stippling dataset with your images
+    # debug_dataset_generator()
+    true_dataset_generator()

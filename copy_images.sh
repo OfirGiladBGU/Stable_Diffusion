@@ -4,7 +4,7 @@
 # Copies all images from source to target directory
 
 SRC="/home/ofirgila/PycharmProjects/ControlNet/training/fill50k/target"
-TRG="/home/ofirgila/PycharmProjects/Stable_Diffusion/data/target"
+TRG="/home/ofirgila/PycharmProjects/Stable_Diffusion/data/original"
 
 echo "Copying images from:"
 echo "  Source: $SRC"
