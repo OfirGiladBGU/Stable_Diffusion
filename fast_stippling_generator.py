@@ -25,6 +25,8 @@ import os
 import math
 import torch
 import matplotlib.pyplot as plt
+from PIL import Image
+import numpy as np
 
 
 # --- Core Logic ---
@@ -139,19 +141,26 @@ class ImageBasedSampler:
         self.idx = 0
 
     def __call__(self, res=512, n_points=3000, density_fn=None, oversample=2.0, plot=True, fig_name=None):
-        from PIL import Image
-        import numpy as np
         if self.idx >= len(self.image_files):
             raise IndexError("No more images left in folder.")
         image_path = os.path.join(self.folder_path, self.image_files[self.idx])
         self.idx += 1
+
+        # Load, resize image and convert [0,255] to [0,1] for direct use
         img = Image.open(image_path).convert("L").resize((res, res), Image.BICUBIC)
         img_arr = torch.from_numpy(np.array(img)).float().to(device)
-        img_arr = (img_arr - img_arr.min()) / (img_arr.max() - img_arr.min() + 1e-12)
+        img_arr = img_arr / 255.0
+        
+        # Add small constant to avoid zero density regions
+        # img_arr = img_arr + 0.01
+        
         def density_fn_img(U, V):
-            x_idx = (U * (res - 1)).round().long()
-            y_idx = (V * (res - 1)).round().long()
-            return img_arr[x_idx, y_idx]
+            x_idx = (U * (res - 1)).clamp(0, res - 1).round().long()
+            y_idx = (V * (res - 1)).clamp(0, res - 1).round().long()
+            # img_arr is (height, width) = (y, x), so index as [y, x]
+            vals = img_arr[y_idx, x_idx]
+            return vals  # Return the direct grayscale density
+
         return sample_blue_noise_density(
             res=res,
             n_points=n_points,
@@ -392,9 +401,12 @@ if __name__ == "__main__":
     rho_linear = lambda U, V: U
     # rho_vertical_quad = lambda U, V: V**2
     # rho_radial = lambda U, V: (1.0 - torch.sqrt((U-0.5)**2 + (V-0.5)**2) / 0.7071).clamp(min=0.0)
-
-    # Example usage: generate 10 images in 'output' folder
-    img_sampler = ImageBasedSampler(folder_path=fr"/home/ofirgila/PycharmProjects/Stable_Diffusion/data/target")
+    
+    # Generate stippling dataset with your images
+    ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
+    img_sampler = ImageBasedSampler(
+        folder_path=os.path.join(ROOT_PATH, "data", "target")
+    )
     generate_stippling_dataset(
         N=10,
         base_sampler=img_sampler,
