@@ -242,7 +242,6 @@ def _plot_density_and_points(rho_grid, coords, res, n_points, fig_name):
     plt.savefig(fig_name)
 
 
-# --- Merged Plotting Helper ---
 def _plot_density_samples_relaxed(rho_grid, coords0, coords_relaxed, res, n_points, iters, fig_name):
     """
     Plots three panels:
