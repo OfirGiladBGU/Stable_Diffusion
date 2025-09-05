@@ -110,7 +110,8 @@ def sample_blue_noise_density(
     density_fn = None,
     oversample: float = 2.0,
     plot: bool = True,
-    fig_name: str = None
+    fig_name: str = None,
+    idx: int = -1
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     High-performance, GPU-parallel sampling of n_points distributed according to ρ(u,v),
@@ -144,18 +145,25 @@ class ImageBasedSampler:
         self.folder_path = folder_path
         self.image_files = [f for f in os.listdir(folder_path) if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff"))]
         self.image_files.sort(key=lambda x: int(x.split('.')[0]))
-        self.idx = 0
+        self.idx = -1  # Start before the first image
 
         # Used for Dataset Export
         self.dataset_paths = dataset_paths
         self.json_data = []
         self.export_json_every_n = 100  # Export every image
 
-    def __call__(self, res=512, n_points=3000, density_fn=None, oversample=2.0, plot=True, fig_name=None):
-        if self.idx >= len(self.image_files):
+    def __call__(self, res=512, n_points=3000, density_fn=None, oversample=2.0, plot=True, fig_name=None, idx=-1):
+        if idx != -1:
+            # Can support multi threading if idx is provided
+            curr_idx = idx
+        else:
+            # Can only be called sequentially
+            self.idx += 1
+            curr_idx = self.idx
+
+        if curr_idx >= len(self.image_files):
             raise IndexError("No more images left in folder.")
-        image_path = os.path.join(self.folder_path, self.image_files[self.idx])
-        self.idx += 1
+        image_path = os.path.join(self.folder_path, self.image_files[curr_idx])
 
         # Load, resize image and convert [0,255] to [0,1] for direct use
         img = Image.open(image_path).convert("L").resize((res, res), Image.BICUBIC)
@@ -181,7 +189,12 @@ class ImageBasedSampler:
             fig_name=fig_name
         )
 
-    def export_sample(self, rho_grid, coords_relaxed, res):
+    def export_sample(self, rho_grid, coords_relaxed, res, idx=-1):
+        if idx != -1:
+            curr_idx = idx
+        else:
+            curr_idx = self.idx
+
         rho_grid_cpu = rho_grid.detach().cpu()
         rho_grid_cpu = (rho_grid_cpu / (rho_grid_cpu.max() + 1e-12)).float()
         rho_grid_cpu = (rho_grid_cpu * 255).to(torch.uint8).numpy()
@@ -208,7 +221,7 @@ class ImageBasedSampler:
             "prompt": f"Stippling"
         })
 
-        if self.idx % self.export_json_every_n == 0:
+        if curr_idx % self.export_json_every_n == 0:
             self.export_json()
 
     def export_json(self):
@@ -227,7 +240,8 @@ def cc_lloyd_relaxation_wrapper(
     iters: int = 5,
     plot: bool = True,
     fig_name: str = None,
-    debug: bool = True
+    debug: bool = True,
+    idx: int = -1
 ) -> torch.Tensor:
     """
     Wraps an existing blue-noise sampler with capacity-constrained Lloyd relaxation.
@@ -238,7 +252,7 @@ def cc_lloyd_relaxation_wrapper(
         (n_points,2) final relaxed coordinates on CPU.
     """
     U, V, rho_grid, coords0 = base_sampler(
-        res=out_res, n_points=n_points, density_fn=density_fn, plot=False
+        res=out_res, n_points=n_points, density_fn=density_fn, plot=False, idx=idx
     )
     coords = coords0.clone().float().to(device)
     grid = torch.stack([U*out_res, V*out_res], dim=-1)
@@ -278,7 +292,8 @@ def cc_lloyd_multires_wrapper(
     levels = (128, 512),
     plot: bool = True,
     fig_name: str = None,
-    debug: bool = True
+    debug: bool = True,
+    idx: int = -1
 ) -> torch.Tensor:
     """
     Multi-resolution capacity-constrained Lloyd relaxation (discretized).
@@ -289,7 +304,7 @@ def cc_lloyd_multires_wrapper(
     coords_relaxed : (n_points,2) tensor on CPU
     """
     U, V, rho_grid, coords0 = base_sampler(
-        res=out_res, n_points=n_points, density_fn=density_fn, plot=False
+        res=out_res, n_points=n_points, density_fn=density_fn, plot=False, idx=idx
     )
     coords = coords0.clone().float().to(device)
     rho_flat = rho_grid.view(-1)
@@ -382,11 +397,14 @@ def generate_stippling_dataset(
     Generate N stippling images using sample_blue_noise_density, saving each to output_dir.
     Each image uses a randomly generated density function (random grayscale map).
     """
+    # TODO: Add parallel processing for faster dataset generation
+
     os.makedirs(output_dir, exist_ok=True)
     if N == -1:
         N = len(base_sampler.image_files)
-    for i in tqdm(range(N)):
-        input_base_name = os.path.basename(base_sampler.image_files[i])
+
+    for idx in tqdm(range(N)):
+        input_base_name = os.path.basename(base_sampler.image_files[idx])
         img_path = os.path.join(output_dir,input_base_name)
         cc_lloyd_multires_wrapper(
             base_sampler=base_sampler,
@@ -397,7 +415,8 @@ def generate_stippling_dataset(
             levels=(512, 512),
             plot=True,
             fig_name=img_path,
-            debug=debug
+            debug=debug,
+            idx=idx
         )
     if not debug:
         base_sampler.export_json()
@@ -459,7 +478,7 @@ def debug_dataset_generator():
 
 def true_dataset_generator():
     # N = 10
-    N = 1000  # Set to -1 to process all images in the folder
+    N = -1  # Set to -1 to process all images in the folder
 
     dataset_paths = dict(
         source_path=os.path.join(ROOT_PATH, "data", "source"),
