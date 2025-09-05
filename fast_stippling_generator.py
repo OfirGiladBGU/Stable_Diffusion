@@ -23,11 +23,16 @@
 
 import os
 import math
+import sys
 import torch
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 from tqdm import tqdm
+print("=== ALL IMPORTS DONE ===")
+sys.stdout.flush()
 
 
 # --- Core Logic ---
@@ -144,7 +149,7 @@ class ImageBasedSampler:
         # Used for Dataset Export
         self.dataset_paths = dataset_paths
         self.json_data = []
-        self.export_json_every_n = 1000  # Export every image
+        self.export_json_every_n = 100  # Export every image
 
     def __call__(self, res=512, n_points=3000, density_fn=None, oversample=2.0, plot=True, fig_name=None):
         if self.idx >= len(self.image_files):
@@ -454,7 +459,7 @@ def debug_dataset_generator():
 
 def true_dataset_generator():
     # N = 10
-    N = -1  # Set to -1 to process all images in the folder
+    N = 1000  # Set to -1 to process all images in the folder
 
     dataset_paths = dict(
         source_path=os.path.join(ROOT_PATH, "data", "source"),
@@ -478,7 +483,10 @@ def true_dataset_generator():
 
 
 if __name__ == "__main__":
+    print("Starting fast stippling generator...")
+    sys.stdout.flush()
     ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
+
     # Set CUDA parameters
     device = "cuda" if torch.cuda.is_available() else "cpu"
     seed = 42
