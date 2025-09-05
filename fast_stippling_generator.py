@@ -144,6 +144,7 @@ class ImageBasedSampler:
         # Used for Dataset Export
         self.dataset_paths = dataset_paths
         self.json_data = []
+        self.export_json_every_n = 1000  # Export every image
 
     def __call__(self, res=512, n_points=3000, density_fn=None, oversample=2.0, plot=True, fig_name=None):
         if self.idx >= len(self.image_files):
@@ -201,6 +202,9 @@ class ImageBasedSampler:
             "target": f"target/{image_base_name}",
             "prompt": f"Stippling"
         })
+
+        if self.idx % self.export_json_every_n == 0:
+            self.export_json()
 
     def export_json(self):
         with open(self.dataset_paths['json_path'], 'w') as f:
@@ -449,6 +453,9 @@ def debug_dataset_generator():
 
 
 def true_dataset_generator():
+    # N = 10
+    N = -1  # Set to -1 to process all images in the folder
+
     dataset_paths = dict(
         source_path=os.path.join(ROOT_PATH, "data", "source"),
         target_path=os.path.join(ROOT_PATH, "data", "target"),
@@ -463,7 +470,7 @@ def true_dataset_generator():
         dataset_paths=dataset_paths
     )
     generate_stippling_dataset(
-        N=10,
+        N=N,
         base_sampler=img_sampler,
         output_dir=os.path.join(ROOT_PATH, "data"),
         debug=False
