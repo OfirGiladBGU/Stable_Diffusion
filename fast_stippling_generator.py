@@ -466,7 +466,7 @@ def example3():
 
 def debug_dataset_generator():
     img_sampler = ImageBasedSampler(
-        folder_path=os.path.join(ROOT_PATH, "data", "original")
+        folder_path=os.path.join(ROOT_PATH, DATA_FOLDER, "original")
     )
     generate_stippling_dataset(
         N=10,
@@ -481,22 +481,22 @@ def true_dataset_generator():
     N = -1  # Set to -1 to process all images in the folder
 
     dataset_paths = dict(
-        source_path=os.path.join(ROOT_PATH, "data", "source"),
-        target_path=os.path.join(ROOT_PATH, "data", "target"),
-        json_path=os.path.join(ROOT_PATH, "data", "prompt.json")
+        source_path=os.path.join(ROOT_PATH, DATA_FOLDER, "source"),
+        target_path=os.path.join(ROOT_PATH, DATA_FOLDER, "target"),
+        json_path=os.path.join(ROOT_PATH, DATA_FOLDER, "prompt.json")
     )
     os.makedirs(os.path.dirname(dataset_paths['json_path']), exist_ok=True)
     os.makedirs(dataset_paths['source_path'], exist_ok=True)
     os.makedirs(dataset_paths['target_path'], exist_ok=True)
 
     img_sampler = ImageBasedSampler(
-        folder_path=os.path.join(ROOT_PATH, "data", "original"),
+        folder_path=os.path.join(ROOT_PATH, DATA_FOLDER, "original"),
         dataset_paths=dataset_paths
     )
     generate_stippling_dataset(
         N=N,
         base_sampler=img_sampler,
-        output_dir=os.path.join(ROOT_PATH, "data"),
+        output_dir=os.path.join(ROOT_PATH, DATA_FOLDER),
         debug=False
     )
 
@@ -504,6 +504,7 @@ def true_dataset_generator():
 if __name__ == "__main__":
     print("Starting fast stippling generator...")
     sys.stdout.flush()
+    DATA_FOLDER = "data"
     ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
 
     # Set CUDA parameters
