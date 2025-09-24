@@ -144,7 +144,8 @@ class ImageBasedSampler:
     def __init__(self, folder_path, dataset_paths=None):
         self.folder_path = folder_path
         self.image_files = [f for f in os.listdir(folder_path) if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff"))]
-        self.image_files.sort(key=lambda x: int(x.split('.')[0]))
+        # self.image_files.sort(key=lambda x: int(x.split('.')[0]))
+        self.image_files.sort(key=lambda x: int(x.split('.')[0]) if x.split('.')[0].isdigit() else str(x.split('.')[0]))
         self.idx = -1  # Start before the first image
 
         # Used for Dataset Export
@@ -208,7 +209,7 @@ class ImageBasedSampler:
         stipple_img[coords_relaxed_indices[:,1], coords_relaxed_indices[:,0]] = 0.0  # Set points to black
         coords_relaxed_cpu = (stipple_img * 255).to(torch.uint8).numpy()
 
-        image_base_name = os.path.basename(self.image_files[self.idx - 1])
+        image_base_name = os.path.basename(self.image_files[curr_idx])
         Image.fromarray(rho_grid_cpu).save(
             os.path.join(self.dataset_paths['source_path'], image_base_name)
         )
@@ -278,7 +279,7 @@ def cc_lloyd_relaxation_wrapper(
                 fig_name
             )
     else:
-        base_sampler.export_sample(rho_grid, coords_relaxed, out_res)
+        base_sampler.export_sample(rho_grid, coords_relaxed, out_res, idx)
     return coords_relaxed
 
 
@@ -331,9 +332,10 @@ def cc_lloyd_multires_wrapper(
                 fig_name
             )
     else:
-        base_sampler.export_sample(rho_grid, coords_relaxed, out_res)
+        base_sampler.export_sample(rho_grid, coords_relaxed, out_res, idx)
     
     return coords_relaxed
+
 
 # --- Plotting helpers ---
 def _plot_density_and_points(rho_grid, coords, res, n_points, fig_name):
