@@ -141,9 +141,9 @@ def sample_blue_noise_density(
 
 # --- Image-based Initial Sampler Class ---
 class ImageBasedSampler:
-    def __init__(self, folder_path, dataset_paths=None):
-        self.folder_path = folder_path
-        self.image_files = [f for f in os.listdir(folder_path) if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff"))]
+    def __init__(self, images_path, dataset_paths=None):
+        self.images_path = images_path
+        self.image_files = [f for f in os.listdir(self.images_path) if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff"))]
         # self.image_files.sort(key=lambda x: int(x.split('.')[0]))
         self.image_files.sort(key=lambda x: int(x.split('.')[0]) if x.split('.')[0].isdigit() else str(x.split('.')[0]))
         self.idx = -1  # Start before the first image
@@ -164,7 +164,7 @@ class ImageBasedSampler:
 
         if curr_idx >= len(self.image_files):
             raise IndexError("No more images left in folder.")
-        image_path = os.path.join(self.folder_path, self.image_files[curr_idx])
+        image_path = os.path.join(self.images_path, self.image_files[curr_idx])
 
         # Load, resize image and convert [0,255] to [0,1] for direct use
         img = Image.open(image_path).convert("L").resize((res, res), Image.BICUBIC)
@@ -392,22 +392,22 @@ def _plot_density_samples_relaxed(rho_grid, coords0, coords_relaxed, res, n_poin
 def generate_stippling_dataset(
     N: int,
     base_sampler = None,
-    output_dir: str = "output",
+    output_path: str = "output",
     debug: bool = True
 ):
     """
-    Generate N stippling images using sample_blue_noise_density, saving each to output_dir.
+    Generate N stippling images using sample_blue_noise_density, saving each to output_path.
     Each image uses a randomly generated density function (random grayscale map).
     """
     # TODO: Add parallel processing for faster dataset generation
 
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_path, exist_ok=True)
     if N == -1:
         N = len(base_sampler.image_files)
 
     for idx in tqdm(range(N)):
         input_base_name = os.path.basename(base_sampler.image_files[idx])
-        img_path = os.path.join(output_dir,input_base_name)
+        img_path = os.path.join(output_path,input_base_name)
         cc_lloyd_multires_wrapper(
             base_sampler=base_sampler,
             density_fn=rho_linear,
@@ -467,38 +467,49 @@ def example3():
 
 
 def debug_dataset_generator():
+    IMAGES_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "original")
+    OUTPUT_PATH = os.path.join(ROOT_PATH, "output")
+    os.makedirs(OUTPUT_PATH, exist_ok=True)
+
     img_sampler = ImageBasedSampler(
-        folder_path=os.path.join(ROOT_PATH, DATA_FOLDER, "original")
+        images_path=IMAGES_PATH
     )
     generate_stippling_dataset(
         N=10,
         base_sampler=img_sampler,
-        output_dir=os.path.join(ROOT_PATH, "output"),
+        output_dir=OUTPUT_PATH,
         debug=True
     )
 
 
 def true_dataset_generator():
+    SOURCE_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "source")
+    TARGET_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "target")
+    JSON_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "prompt.json")
+    IMAGES_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "original")
+    OUTPUT_PATH = os.path.join(ROOT_PATH, "output")
+    os.makedirs(OUTPUT_PATH, exist_ok=True)
+
     # N = 10
     N = -1  # Set to -1 to process all images in the folder
 
     dataset_paths = dict(
-        source_path=os.path.join(ROOT_PATH, DATA_FOLDER, "source"),
-        target_path=os.path.join(ROOT_PATH, DATA_FOLDER, "target"),
-        json_path=os.path.join(ROOT_PATH, DATA_FOLDER, "prompt.json")
+        source_path=SOURCE_PATH,
+        target_path=TARGET_PATH,
+        json_path=JSON_PATH
     )
     os.makedirs(os.path.dirname(dataset_paths['json_path']), exist_ok=True)
     os.makedirs(dataset_paths['source_path'], exist_ok=True)
     os.makedirs(dataset_paths['target_path'], exist_ok=True)
 
     img_sampler = ImageBasedSampler(
-        folder_path=os.path.join(ROOT_PATH, DATA_FOLDER, "original"),
+        images_path=IMAGES_PATH,
         dataset_paths=dataset_paths
     )
     generate_stippling_dataset(
         N=N,
         base_sampler=img_sampler,
-        output_dir=os.path.join(ROOT_PATH, DATA_FOLDER),
+        output_path=OUTPUT_PATH,
         debug=False
     )
 
@@ -511,6 +522,7 @@ if __name__ == "__main__":
 
     # Set CUDA parameters
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
     seed = 42
     torch.manual_seed(seed)
     if device == "cuda":

@@ -2,9 +2,15 @@ name: sd
 channels:
   - defaults
   - conda-forge
+  - pytorch
+  - nvidia
 dependencies:
   - python=3.10
   - pip
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8
   - numpy
   - pandas
   - pillow
@@ -66,7 +72,7 @@ dependencies:
 # 1) Create the environment:
 #    conda env create -f sd_env_windows.yaml
 # 2) Activate it:
-#    conda activate sd-win
+#    conda activate sd
 # 3) Install PyTorch (choose one):
 #    - For CUDA 11.8 (NVIDIA GPU):
 #      conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
