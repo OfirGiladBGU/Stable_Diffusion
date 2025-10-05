@@ -141,7 +141,7 @@ def sample_blue_noise_density(
 
 # --- Image-based Initial Sampler Class ---
 class ImageBasedSampler:
-    def __init__(self, images_path, dataset_paths=None):
+    def __init__(self, images_path, dataset_paths=None, white_threshold: float = 0.95):
         self.images_path = images_path
         self.image_files = [f for f in os.listdir(self.images_path) if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff"))]
         # self.image_files.sort(key=lambda x: int(x.split('.')[0]))
@@ -152,6 +152,9 @@ class ImageBasedSampler:
         self.dataset_paths = dataset_paths
         self.json_data = []
         self.export_json_every_n = 100  # Export every image
+        # Background detection settings (simple white-threshold)
+        # Pixels with grayscale value >= white_threshold (in [0,1]) will be treated as empty (zero density)
+        self.white_threshold = float(white_threshold)
 
     def __call__(self, res=512, n_points=3000, density_fn=None, oversample=2.0, plot=True, fig_name=None, idx=-1):
         if idx != -1:
@@ -170,6 +173,10 @@ class ImageBasedSampler:
         img = Image.open(image_path).convert("L").resize((res, res), Image.BICUBIC)
         img_arr = torch.from_numpy(np.array(img)).float().to(device)
         img_arr = img_arr / 255.0
+        # Simple background detection (white-threshold only)
+        threshold = float(self.white_threshold)
+        mask = img_arr >= threshold
+        mask = mask.to(device)
         
         # Add small constant to avoid zero density regions
         # img_arr = img_arr + 0.01
@@ -179,7 +186,9 @@ class ImageBasedSampler:
             y_idx = (V * (res - 1)).clamp(0, res - 1).round().long()
             # img_arr is (height, width) = (y, x), so index as [y, x]
             vals = img_arr[y_idx, x_idx]
-            return vals  # Return the direct grayscale density
+            # Apply computed background mask: set background pixels to zero density
+            vals = torch.where(mask[y_idx, x_idx], torch.tensor(0.0, device=device), vals)
+            return vals  # Return the direct grayscale density (with white threshold applied)
 
         return sample_blue_noise_density(
             res=res,
@@ -467,22 +476,27 @@ def example3():
 
 
 def debug_dataset_generator():
+    WHITE_THRESHOLD = 0.95  # Threshold for white pixels
+
     IMAGES_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "original")
     OUTPUT_PATH = os.path.join(ROOT_PATH, "output")
     os.makedirs(OUTPUT_PATH, exist_ok=True)
 
     img_sampler = ImageBasedSampler(
-        images_path=IMAGES_PATH
+        images_path=IMAGES_PATH,
+        white_threshold=WHITE_THRESHOLD
     )
     generate_stippling_dataset(
         N=10,
         base_sampler=img_sampler,
-        output_dir=OUTPUT_PATH,
+        output_path=OUTPUT_PATH,
         debug=True
     )
 
 
 def true_dataset_generator():
+    WHITE_THRESHOLD = 0.9  # Threshold for white pixels
+
     SOURCE_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "source")
     TARGET_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "target")
     JSON_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "prompt.json")
@@ -504,7 +518,8 @@ def true_dataset_generator():
 
     img_sampler = ImageBasedSampler(
         images_path=IMAGES_PATH,
-        dataset_paths=dataset_paths
+        dataset_paths=dataset_paths,
+        white_threshold=WHITE_THRESHOLD
     )
     generate_stippling_dataset(
         N=N,
