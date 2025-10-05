@@ -7,10 +7,10 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  - pytorch
-  - torchvision
-  - torchaudio
-  - pytorch-cuda=11.8
+  # PyTorch will be installed via pip wheels for CUDA 12.9 (cu129).
+  # The wheels use the +cu129 suffix (example: torch==2.8.0+cu129).
+  # We keep pytorch-cuda pinned to a nearby conda package for CUDA libs if desired.
+  - pytorch-cuda=12.4
   - numpy
   - pandas
   - pillow
@@ -59,7 +59,12 @@ dependencies:
     - typing-extensions==4.12.2
     - urllib3==2.5.0
     - webdataset==1.0.2
-    - xformers==0.0.31.post1
+  - xformers==0.0.31.post1
+  # The following torch packages are installed from the PyTorch cu129 index:
+  #   pip install --index-url https://download.pytorch.org/whl/cu129 torch torchvision torchaudio
+  - torch==2.8.0+cu129
+  - torchvision==0.23.0+cu129
+  - torchaudio==2.8.0+cu129
     - diffusers==0.35.1
     - transformers==4.56.0
     - datasets==2.14.4
