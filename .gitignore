@@ -209,3 +209,5 @@ __marimo__/
 # Custom
 data*/
 output/
+h5_data/
+h5_export/
