@@ -24,6 +24,22 @@
 import os
 import math
 import sys
+
+# --- Environment fixes for OpenMP / MKL on Windows ---
+# Some Windows Python packages (MKL, OpenMP-enabled libraries) can cause this error:
+#   OMP: Error #15: Initializing libiomp5md.dll, but found libiomp5md.dll already initialized.
+# To avoid that at runtime, set thread limits for BLAS/OpenMP runtimes and allow a
+# duplicate OpenMP runtime as a last-resort fallback. Placing these env vars before
+# importing heavy numeric libraries (torch, numpy, etc.) prevents the crash.
+os.environ.setdefault('OMP_NUM_THREADS', '1')
+os.environ.setdefault('MKL_NUM_THREADS', '1')
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+os.environ.setdefault('VECLIB_MAXIMUM_THREADS', '1')
+# Unsafe but pragmatic fallback on Windows when multiple OpenMP runtimes exist
+# (see script output message about KMP_DUPLICATE_LIB_OK). If you prefer not to
+# allow duplicates, remove or set this to 'FALSE' and resolve conflicting packages.
+os.environ.setdefault('KMP_DUPLICATE_LIB_OK', 'TRUE')
+
 import torch
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
