@@ -524,6 +524,9 @@ def example3():
 
 
 def debug_dataset_generator():
+    gaussian_blur = False
+    smart_background = True
+
     WHITE_THRESHOLD = 0.95  # Threshold for white pixels
 
     IMAGES_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "original")
@@ -532,7 +535,9 @@ def debug_dataset_generator():
 
     img_sampler = ImageBasedSampler(
         images_path=IMAGES_PATH,
-        white_threshold=WHITE_THRESHOLD
+        white_threshold=WHITE_THRESHOLD,
+        gaussian_blur=gaussian_blur,
+        smart_background=smart_background
     )
     generate_stippling_dataset(
         N=10,
@@ -543,6 +548,9 @@ def debug_dataset_generator():
 
 
 def true_dataset_generator():
+    gaussian_blur = False
+    smart_background = True
+
     WHITE_THRESHOLD = 0.9  # Threshold for white pixels
 
     SOURCE_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "source")
@@ -567,7 +575,9 @@ def true_dataset_generator():
     img_sampler = ImageBasedSampler(
         images_path=IMAGES_PATH,
         dataset_paths=dataset_paths,
-        white_threshold=WHITE_THRESHOLD
+        white_threshold=WHITE_THRESHOLD,
+        gaussian_blur=gaussian_blur,
+        smart_background=smart_background
     )
     generate_stippling_dataset(
         N=N,

@@ -158,7 +158,7 @@ def main():
     CFG_FILE = None              # path to a single .h5 file to inspect (overrides CFG_DIR)
     CFG_EXTRACT = True           # whether to extract a dataset (now enabled by default)
     CFG_DATASET = None           # dataset path inside h5 to extract, e.g. '/group/subds' (None => extract all)
-    CFG_OUTDIR = 'output'        # where to save extracted .npy files (changed to repo output folder)
+    CFG_OUTDIR = 'h5_export'     # where to save extracted .npy files (changed to repo output folder)
     # ----------------- END CONFIG -----------------
 
     targets = []
