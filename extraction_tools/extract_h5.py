@@ -42,61 +42,41 @@ def output_dir_for_h5(h5_path: Path) -> Path:
 
 
 def can_be_image(shape, dtype):
-    """Check if a dataset can be visualized as an image."""
+    """Check if a dataset can be visualized as an image.
+    
+    Only datasets with 256x256 spatial dimensions are considered images.
+    """
     if len(shape) < 2:
         return False
     
-    # 2D grayscale: (H, W)
+    # 2D image: must be exactly (256, 256)
     if len(shape) == 2:
-        return True
+        return shape[0] == 256 and shape[1] == 256
     
-    # 3D with channels: (H, W, C) where C is 1, 3, or 4
-    if len(shape) == 3 and shape[2] in [1, 3, 4]:
-        return True
-    
-    # 3D grayscale stack: (N, H, W) - can save as multiple images
+    # 3D stack of images: must be (N, 256, 256)
     if len(shape) == 3:
-        return True
+        return shape[1] == 256 and shape[2] == 256
     
-    # 4D with channels: (N, H, W, C) where C is 1, 3, or 4
+    # 4D with channels: must be (N, 256, 256, C) where C is 1, 3, or 4
     if len(shape) == 4 and shape[3] in [1, 3, 4]:
-        return True
+        return shape[1] == 256 and shape[2] == 256
     
     return False
 
 
-def normalize_array_for_image(arr):
-    """Normalize array to 0-255 uint8 range for image saving."""
+def convert_to_binary_image(arr):
+    """Convert array to binary image (0 or 255 uint8).
+    
+    For microstructure images, we threshold the data to create a binary image:
+    - Values > 0 become 255 (white)
+    - Values == 0 become 0 (black)
+    """
     arr = np.array(arr)
     
-    # Handle boolean arrays
-    if arr.dtype == bool:
-        return (arr * 255).astype(np.uint8)
+    # Convert to binary: any non-zero value becomes 255, zero stays 0
+    binary = (arr > 0).astype(np.uint8) * 255
     
-    # Handle integer types
-    if np.issubdtype(arr.dtype, np.integer):
-        # If already in a reasonable range, just convert
-        if arr.min() >= 0 and arr.max() <= 255:
-            return arr.astype(np.uint8)
-        # Otherwise normalize
-        arr_min, arr_max = arr.min(), arr.max()
-        if arr_max > arr_min:
-            arr = ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
-        else:
-            arr = np.zeros_like(arr, dtype=np.uint8)
-        return arr
-    
-    # Handle floating point
-    if np.issubdtype(arr.dtype, np.floating):
-        arr_min, arr_max = arr.min(), arr.max()
-        if arr_max > arr_min:
-            arr = ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
-        else:
-            arr = np.zeros_like(arr, dtype=np.uint8)
-        return arr
-    
-    # Default: try to convert directly
-    return arr.astype(np.uint8)
+    return binary
 
 
 def extract_images_from_dataset(h5_path: str, dataset_path: str, base_output_dir: str):
@@ -128,51 +108,45 @@ def extract_images_from_dataset(h5_path: str, dataset_path: str, base_output_dir
             data = ds[()]
             
             # Handle different dimensionalities
-            if len(shape) == 2:
-                # 2D grayscale image
-                img_data = normalize_array_for_image(data)
+            if len(shape) == 2 and shape[0] == 256 and shape[1] == 256:
+                # Single 2D binary image (256, 256)
+                img_data = convert_to_binary_image(data)
                 img = Image.fromarray(img_data, mode='L')
                 out_path = os.path.join(out_dir, f"{dataset_name}.png")
                 img.save(out_path)
-                print(f"  → Saved 2D image: {out_path}")
+                print(f"  → Saved 2D binary image (256x256): {out_path}")
                 
-            elif len(shape) == 3 and shape[2] in [1, 3, 4]:
-                # Single image with channels (H, W, C)
-                img_data = normalize_array_for_image(data)
-                if shape[2] == 1:
-                    img = Image.fromarray(img_data[:, :, 0], mode='L')
-                elif shape[2] == 3:
-                    img = Image.fromarray(img_data, mode='RGB')
-                elif shape[2] == 4:
-                    img = Image.fromarray(img_data, mode='RGBA')
-                out_path = os.path.join(out_dir, f"{dataset_name}.png")
-                img.save(out_path)
-                print(f"  → Saved {shape[2]}-channel image: {out_path}")
-                
-            elif len(shape) == 3:
-                # Stack of 2D grayscale images (N, H, W)
+            elif len(shape) == 3 and shape[1] == 256 and shape[2] == 256:
+                # Stack of 2D binary images (N, 256, 256)
                 n_images = shape[0]
+                print(f"  → Extracting {n_images} binary images (256x256) from {dataset_name}...")
                 for i in range(n_images):
-                    img_data = normalize_array_for_image(data[i])
+                    img_data = convert_to_binary_image(data[i])
                     img = Image.fromarray(img_data, mode='L')
-                    out_path = os.path.join(out_dir, f"{dataset_name}_{i:04d}.png")
+                    out_path = os.path.join(out_dir, f"{dataset_name}_{i:05d}.png")
                     img.save(out_path)
-                print(f"  → Saved {n_images} images from stack: {out_dir}/{dataset_name}_*.png")
+                    # Print progress every 1000 images
+                    if (i + 1) % 1000 == 0:
+                        print(f"    Progress: {i + 1}/{n_images} images saved")
+                print(f"  ✓ Saved {n_images} binary images: {out_dir}/{dataset_name}_*.png")
                 
-            elif len(shape) == 4 and shape[3] in [1, 3, 4]:
-                # Stack of images with channels (N, H, W, C)
+            elif len(shape) == 4 and shape[1] == 256 and shape[2] == 256 and shape[3] in [1, 3, 4]:
+                # Stack of images with channels (N, 256, 256, C)
                 n_images = shape[0]
+                print(f"  → Extracting {n_images} {shape[3]}-channel images (256x256) from {dataset_name}...")
                 for i in range(n_images):
-                    img_data = normalize_array_for_image(data[i])
+                    img_data = convert_to_binary_image(data[i])
                     if shape[3] == 1:
                         img = Image.fromarray(img_data[:, :, 0], mode='L')
                     elif shape[3] == 3:
                         img = Image.fromarray(img_data, mode='RGB')
                     elif shape[3] == 4:
                         img = Image.fromarray(img_data, mode='RGBA')
-                    out_path = os.path.join(out_dir, f"{dataset_name}_{i:04d}.png")
+                    out_path = os.path.join(out_dir, f"{dataset_name}_{i:05d}.png")
                     img.save(out_path)
-                print(f"  → Saved {n_images} {shape[3]}-channel images from stack: {out_dir}/{dataset_name}_*.png")
+                    if (i + 1) % 1000 == 0:
+                        print(f"    Progress: {i + 1}/{n_images} images saved")
+                print(f"  ✓ Saved {n_images} {shape[3]}-channel binary images: {out_dir}/{dataset_name}_*.png")
                 
     except Exception as e:
         print(f"  ✗ Failed to extract images from {dataset_path}: {e}")
