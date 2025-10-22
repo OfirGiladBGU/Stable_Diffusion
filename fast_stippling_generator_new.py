@@ -559,10 +559,10 @@ def debug_dataset_generator():
 
 def true_dataset_generator():
     gaussian_blur = False
-    smart_background = True
+    smart_background = False
     # white_threshold = 0.9  # Threshold for white pixels
     white_threshold = 1.1  # Threshold for white pixels
-    invert_colors = True  # Invert colors for stippling
+    invert_colors = False  # Invert colors for stippling
 
     SOURCE_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "source")
     TARGET_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "target")
@@ -602,7 +602,7 @@ def true_dataset_generator():
 if __name__ == "__main__":
     print("Starting fast stippling generator...")
     sys.stdout.flush()
-    DATA_FOLDER = "data"
+    DATA_FOLDER = "data_lattice"
     ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
 
     # Set CUDA parameters
