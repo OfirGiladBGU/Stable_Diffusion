@@ -138,6 +138,7 @@ def process_one(npy_path: Path, projection_options: Dict[str, bool], image_forma
 
         # Save images for available views
         base_stem = npy_path.stem
+        parent_stem = str(npy_path.parent.stem).replace("_output", "")
         view_key_to_suffix = {
             "front_image": "front",
             "back_image": "back",
@@ -152,7 +153,8 @@ def process_one(npy_path: Path, projection_options: Dict[str, bool], image_forma
             img = proj.get(k)
             if img is None:
                 continue
-            out_path = out_dir / f"{base_stem}_{suffix}"
+            # out_path = out_dir / f"{base_stem}_{suffix}"
+            out_path = out_dir / f"{parent_stem}_{base_stem}_{suffix}"
             _try_save_image(out_path, img, image_format)
             any_saved = True
 
