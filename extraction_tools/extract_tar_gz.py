@@ -1,26 +1,39 @@
 #!/usr/bin/env python3
 """
-Extract all .tar.gz files in the downloads folder to subdirectories named after each archive.
+Extract .tar.gz files to subdirectories named after each archive.
 
 Usage:
   python extract_tar_gz.py
 
 Features:
-- Finds all .tar.gz files in the downloads folder
-- Extracts each archive to a subdirectory with the archive's base name
+- Processes a list of .tar.gz files (specified in INPUT_FILES)
+- Extracts each archive to a subdirectory with the archive's stem name inside the archive's parent directory
 - Shows progress and error handling
+
+Rules:
+- Input is a hardcoded list: INPUT_FILES. If empty, script does nothing.
+- For each tar.gz file, creates <tar_parent>/<tar_stem>/ folder
+- Extracts contents into that folder
 
 Requires: tarfile (built-in), pathlib (built-in)
 """
 
 import tarfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 
-def find_tar_gz_files(downloads_dir: Path) -> List[Path]:
-    """Find all .tar.gz files in the downloads directory."""
-    return list(downloads_dir.glob("*.tar.gz"))
+def output_dir_for_tar(tar_path: Path) -> Path:
+    """
+    Create output dir path inside the tar's parent directory, named:
+        <tar_parent>/<tar_stem>
+
+    Note: This matches the pattern used in other extraction scripts.
+    """
+    parent = tar_path.parent
+    # Get base name without .tar.gz extension
+    stem = tar_path.name.replace('.tar.gz', '').replace('.tgz', '')
+    return parent / stem
 
 
 def extract_archive(tar_path: Path, extract_to: Path) -> bool:
@@ -49,42 +62,48 @@ def extract_archive(tar_path: Path, extract_to: Path) -> bool:
 
 def main():
     # ----------------- CONFIG (edit here) -----------------
-    # Set the path to your downloads folder relative to project root
-    CFG_DOWNLOADS_DIR = Path(__file__).parent.parent / "downloads"
+    # Provide the list of .tar.gz files to process. Empty => do nothing.
+    INPUT_FILES: List[str] = [
+        "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/PSL.tar.gz",
+        "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/TPMS.tar.gz",
+        "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/Truss.tar.gz",
+    ]
     # ----------------- END CONFIG -----------------
     
-    # Check if downloads directory exists
-    if not CFG_DOWNLOADS_DIR.exists():
-        print(f"Error: downloads directory not found at {CFG_DOWNLOADS_DIR}")
+    # If input list empty, do nothing
+    if not INPUT_FILES:
+        print("No input files provided. Nothing to do.")
         return
     
-    if not CFG_DOWNLOADS_DIR.is_dir():
-        print(f"Error: {CFG_DOWNLOADS_DIR} is not a directory")
+    # Resolve and validate inputs
+    targets = [Path(p).resolve() for p in INPUT_FILES]
+    valid_targets = []
+    for t in targets:
+        if not t.exists():
+            print(f"Warning: Skipping non-existent file: {t}")
+        elif not t.is_file():
+            print(f"Warning: Skipping non-file path: {t}")
+        elif not (t.suffix == '.gz' and '.tar' in t.name):
+            print(f"Warning: Skipping non-tar.gz file: {t}")
+        else:
+            valid_targets.append(t)
+    
+    if not valid_targets:
+        print("No valid .tar.gz files found in the input list.")
         return
     
-    print(f"Scanning for .tar.gz files in: {CFG_DOWNLOADS_DIR}")
-    
-    # Find all tar.gz files
-    tar_files = find_tar_gz_files(CFG_DOWNLOADS_DIR)
-    
-    if not tar_files:
-        print("No .tar.gz files found in downloads/")
-        return
-    
-    print(f"Found {len(tar_files)} .tar.gz file(s)\n")
+    print(f"Found {len(valid_targets)} .tar.gz file(s) to extract\n")
     
     # Extract each archive
     success_count = 0
-    for tar_path in tar_files:
-        # Get base name without .tar.gz extension
-        base_name = tar_path.name.replace('.tar.gz', '')
-        extract_to = CFG_DOWNLOADS_DIR / base_name
+    for tar_path in valid_targets:
+        extract_to = output_dir_for_tar(tar_path)
         
-        print(f"Extracting {tar_path.name}...")
+        print(f"Extracting {tar_path.name} to {extract_to}...")
         if extract_archive(tar_path, extract_to):
             success_count += 1
     
-    print(f"\nExtraction complete! Successfully extracted {success_count}/{len(tar_files)} archives")
+    print(f"\nExtraction complete! Successfully extracted {success_count}/{len(valid_targets)} archives")
 
 
 if __name__ == '__main__':

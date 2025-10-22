@@ -29,23 +29,6 @@ from typing import Iterable, List, Optional, Tuple
 import numpy as np
 
 
-# ----------------- CONFIG (edit here) -----------------
-# Provide the list of folders to scan (recursively). Empty => do nothing.
-INPUT_DIRS: List[str] = [
-    "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/PSL",
-    "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/TPMS",
-    "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/Truss",
-]
-
-INPUT_DIRS = [str(p) for p in INPUT_DIRS]
-# Cap workers to avoid saturating CPU. None => auto = min(8, os.cpu_count() or 1)
-MAX_WORKERS: Optional[int] = None
-
-# Key to extract from each .npz
-VOXEL_KEY: str = "voxel"
-# ----------------- END CONFIG -----------------
-
-
 class MissingVoxelKeyError(RuntimeError):
     pass
 
@@ -119,6 +102,21 @@ def collect_targets(dirs: List[Path]) -> List[Path]:
 
 
 def main() -> None:
+    # ----------------- CONFIG (edit here) -----------------
+    # Provide the list of folders to scan (recursively). Empty => do nothing.
+    INPUT_DIRS: List[str] = [
+        "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/PSL",
+        "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/TPMS",
+        "/home/ofirgila/PycharmProjects/Stable_Diffusion/downloads/Truss",
+    ]
+
+    # Cap workers to avoid saturating CPU. None => auto = min(8, os.cpu_count() or 1)
+    MAX_WORKERS: Optional[int] = None
+
+    # Key to extract from each .npz
+    VOXEL_KEY: str = "voxel"
+    # ----------------- END CONFIG -----------------
+
     # If input list empty, do nothing
     if not INPUT_DIRS:
         print("No input directories provided. Nothing to do.")
