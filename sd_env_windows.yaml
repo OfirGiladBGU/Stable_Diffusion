@@ -55,16 +55,16 @@ dependencies:
     - timm==1.0.19
     - tokenizers==0.22.0
     - tqdm==4.67.1
-  # triton (3.3.1) removed: no official Windows wheel for this Python; install later if needed via pip/conda-compatible build
+    # triton (3.3.1) removed: no official Windows wheel for this Python; install later if needed via pip/conda-compatible build
     - typing-extensions==4.12.2
     - urllib3==2.5.0
     - webdataset==1.0.2
-  - xformers==0.0.31.post1
-  # The following torch packages are installed from the PyTorch cu129 index:
-  #   pip install --index-url https://download.pytorch.org/whl/cu129 torch torchvision torchaudio
-  - torch==2.8.0+cu129
-  - torchvision==0.23.0+cu129
-  - torchaudio==2.8.0+cu129
+    - xformers==0.0.31.post1
+    # The following torch packages are installed from the PyTorch cu129 index:
+    #   pip install --index-url https://download.pytorch.org/whl/cu129 torch torchvision torchaudio
+    - torch==2.8.0+cu129
+    - torchvision==0.23.0+cu129
+    - torchaudio==2.8.0+cu129
     - diffusers==0.35.1
     - transformers==4.56.0
     - datasets==2.14.4
