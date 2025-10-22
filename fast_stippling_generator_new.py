@@ -143,7 +143,8 @@ def sample_blue_noise_density(
 class ImageBasedSampler:
     def __init__(self, images_path, dataset_paths=None, white_threshold: float = 0.95,
                  gaussian_blur: bool = False, blur_radius: float = 1.0,
-                 smart_background: bool = False, smart_bg_tolerance: int = 0):
+                 smart_background: bool = False, smart_bg_tolerance: int = 0,
+                 invert_colors: bool = False):
         self.images_path = images_path
         self.image_files = [f for f in os.listdir(self.images_path) if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".tiff"))]
         # self.image_files.sort(key=lambda x: int(x.split('.')[0]))
@@ -167,6 +168,9 @@ class ImageBasedSampler:
         # smart_bg_tolerance allows a tolerance (in 0-255 integer grayscale units); default 0 = exact match.
         self.smart_background = bool(smart_background)
         self.smart_bg_tolerance = int(smart_bg_tolerance)
+        
+        # Color inversion control: if True, inverts grayscale (255 - value)
+        self.invert_colors = bool(invert_colors)
 
     def __call__(self, res=512, n_points=3000, density_fn=None, oversample=2.0, plot=True, fig_name=None, idx=-1):
         if idx != -1:
@@ -186,10 +190,14 @@ class ImageBasedSampler:
         # to the image used for density evaluation.
         img = Image.open(image_path).convert("L").resize((res, res), Image.BICUBIC)
 
+        # [FLAG] Apply color inversion FIRST (before any other processing)
+        if self.invert_colors:
+            img = Image.fromarray(255 - np.array(img))
+
         # Prepare a numpy grayscale array (uint8 0-255) for smart-background voting
         img_np = np.array(img).astype(np.uint8)
 
-        # Compute smart-background mode from border pixels if requested
+        # [FLAG] Compute smart-background mode from border pixels if requested
         mode_val = None
         if self.smart_background:
             # Collect top, bottom, left, right border pixel values
@@ -202,7 +210,8 @@ class ImageBasedSampler:
                 counts = np.bincount(border_pixels)
                 mode_val = int(np.argmax(counts))
 
-        # Optionally apply Gaussian blur to the image used for density
+        # [FLAG] Optionally apply Gaussian blur to the image used for density
+        # This now operates on the inverted image if invert_colors is True
         if self.gaussian_blur and self.blur_radius > 0:
             img = img.filter(ImageFilter.GaussianBlur(radius=self.blur_radius))
 
@@ -213,7 +222,7 @@ class ImageBasedSampler:
         threshold = float(self.white_threshold)
         mask = img_arr >= threshold
 
-        # If smart-background enabled and we found a mode, build a mask of pixels equal
+        # [FLAG] If smart-background enabled and we found a mode, build a mask of pixels equal
         # (within tolerance) to the mode value and combine with the threshold mask.
         if self.smart_background and (mode_val is not None):
             tol = max(0, int(self.smart_bg_tolerance))
@@ -526,8 +535,8 @@ def example3():
 def debug_dataset_generator():
     gaussian_blur = False
     smart_background = True
-
-    WHITE_THRESHOLD = 0.95  # Threshold for white pixels
+    white_threshold = 0.95  # Threshold for white pixels
+    invert_colors = False  # Invert colors for stippling
 
     IMAGES_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "original")
     OUTPUT_PATH = os.path.join(ROOT_PATH, "output")
@@ -535,9 +544,10 @@ def debug_dataset_generator():
 
     img_sampler = ImageBasedSampler(
         images_path=IMAGES_PATH,
-        white_threshold=WHITE_THRESHOLD,
+        white_threshold=white_threshold,
         gaussian_blur=gaussian_blur,
-        smart_background=smart_background
+        smart_background=smart_background,
+        invert_colors=invert_colors,
     )
     generate_stippling_dataset(
         N=10,
@@ -550,8 +560,9 @@ def debug_dataset_generator():
 def true_dataset_generator():
     gaussian_blur = False
     smart_background = True
-
-    WHITE_THRESHOLD = 0.9  # Threshold for white pixels
+    # white_threshold = 0.9  # Threshold for white pixels
+    white_threshold = 1.1  # Threshold for white pixels
+    invert_colors = True  # Invert colors for stippling
 
     SOURCE_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "source")
     TARGET_PATH = os.path.join(ROOT_PATH, DATA_FOLDER, "target")
@@ -575,9 +586,10 @@ def true_dataset_generator():
     img_sampler = ImageBasedSampler(
         images_path=IMAGES_PATH,
         dataset_paths=dataset_paths,
-        white_threshold=WHITE_THRESHOLD,
+        white_threshold=white_threshold,
         gaussian_blur=gaussian_blur,
-        smart_background=smart_background
+        smart_background=smart_background,
+        invert_colors=invert_colors,
     )
     generate_stippling_dataset(
         N=N,
