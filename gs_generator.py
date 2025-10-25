@@ -7,57 +7,52 @@ from scipy.ndimage import gaussian_filter
 
 # === Gradient modes from math-equ-image-demo ===
 
-# OLD versions (legacy - kept for backwards compatibility)
+# Main.py based functions (map trig functions from [-1,1] to [0,1] for grayscale)
 def linear_gradient(X, Y, params):
-    # Original: (x + y) / 2, already in [0, 1]
+    # main.py: (x + y) / 2
     return np.clip((X + Y) * 0.5 + params.get('offset', 0.0), 0.0, 1.0)
 
 def sinusoidal_gradient(X, Y, params):
-    # OLD: uses 0.5 + 0.5 * sin() mapping
-    return 0.5 + 0.5 * np.sin(params['freq'] * (X*X + Y*Y) + params['phase'])
+    # main.py: np.sin(10 * (x**2 + y**2))
+    # (val + 1.0) * 0.5 maps [-1, 1] to [0, 1]
+    val = np.sin(params['freq'] * (X*X + Y*Y) + params['phase'])
+    return (val + 1.0) * 0.5
 
 def cosine_gradient(X, Y, params):
-    # OLD: uses 0.5 + 0.5 * cos() mapping
-    return 0.5 + 0.5 * np.cos(params['freq'] * (X * Y) + params['phase'])
+    # main.py: np.cos(10 * (x * y))
+    val = np.cos(params['freq'] * (X * Y) + params['phase'])
+    return (val + 1.0) * 0.5
 
 def radial_sinusoidal_gradient(X, Y, params):
-    # OLD: uses 0.5 + 0.5 * sin() mapping
+    # main.py: np.sin(10 * np.sqrt(x**2 + y**2))
+    r = np.sqrt(X*X + Y*Y)
+    val = np.sin(params['freq'] * r + params['phase'])
+    return (val + 1.0) * 0.5
+
+def radial_cosine_gradient(X, Y, params):
+    # main.py: np.cos(10 * np.sqrt(x**2 + y**2))
+    r = np.sqrt(X*X + Y*Y)
+    val = np.cos(params['freq'] * r + params['phase'])
+    return (val + 1.0) * 0.5
+
+
+# NEW versions - Original gs_generator functions (mathematically identical: 0.5 + 0.5*val = (val+1.0)*0.5)
+def linear_gradient_new(X, Y, params):
+    return np.clip((X + Y) * 0.5 + params.get('offset',0.0), 0.0, 1.0)
+
+def sinusoidal_gradient_new(X, Y, params):
+    return 0.5 + 0.5 * np.sin(params['freq'] * (X*X + Y*Y) + params['phase'])
+
+def cosine_gradient_new(X, Y, params):
+    return 0.5 + 0.5 * np.cos(params['freq'] * (X * Y) + params['phase'])
+
+def radial_sinusoidal_gradient_new(X, Y, params):
     r = np.sqrt(X*X + Y*Y)
     return 0.5 + 0.5 * np.sin(params['freq'] * r + params['phase'])
 
-def radial_cosine_gradient(X, Y, params):
-    # OLD: uses 0.5 + 0.5 * cos() mapping
+def radial_cosine_gradient_new(X, Y, params):
     r = np.sqrt(X*X + Y*Y)
     return 0.5 + 0.5 * np.cos(params['freq'] * r + params['phase'])
-
-
-# NEW versions (matches main.py grayscale output exactly)
-def linear_gradient_new(X, Y, params):
-    # Original: (x + y) / 2, already in [0, 1]
-    return np.clip((X + Y) * 0.5 + params.get('offset', 0.0), 0.0, 1.0)
-
-def sinusoidal_gradient_new(X, Y, params):
-    # NEW: np.sin(10 * (x**2 + y**2)), normalized to [0, 1]
-    # Matches main.py grayscale conversion
-    val = np.sin(params['freq'] * (X*X + Y*Y) + params['phase'])
-    return (val + 1.0) * 0.5  # Map [-1, 1] to [0, 1]
-
-def cosine_gradient_new(X, Y, params):
-    # NEW: np.cos(10 * (x * y)), normalized to [0, 1]
-    val = np.cos(params['freq'] * (X * Y) + params['phase'])
-    return (val + 1.0) * 0.5  # Map [-1, 1] to [0, 1]
-
-def radial_sinusoidal_gradient_new(X, Y, params):
-    # NEW: np.sin(10 * np.sqrt(x**2 + y**2)), normalized to [0, 1]
-    r = np.sqrt(X*X + Y*Y)
-    val = np.sin(params['freq'] * r + params['phase'])
-    return (val + 1.0) * 0.5  # Map [-1, 1] to [0, 1]
-
-def radial_cosine_gradient_new(X, Y, params):
-    # NEW: np.cos(10 * np.sqrt(x**2 + y**2)), normalized to [0, 1]
-    r = np.sqrt(X*X + Y*Y)
-    val = np.cos(params['freq'] * r + params['phase'])
-    return (val + 1.0) * 0.5  # Map [-1, 1] to [0, 1]
 
 # === Additional modes (waves, shapes, noise) ===
 
@@ -98,13 +93,13 @@ def combined_shape_func(X, Y, params):
 # === Map function names to implementations ===
 
 FUNC_MAP = {
-    # OLD versions (legacy)
+    # Main versions (based on main.py - default)
     'Linear Gradient'            : linear_gradient,
     'Sinusoidal Gradient'       : sinusoidal_gradient,
     'Cosine Gradient'            : cosine_gradient,
     'Radial Sinusoidal Gradient': radial_sinusoidal_gradient,
     'Radial Cosine Gradient'     : radial_cosine_gradient,
-    # NEW versions (main.py compatible)
+    # NEW versions (alternative mapping - same math, kept for flexibility)
     'Linear Gradient New'            : linear_gradient_new,
     'Sinusoidal Gradient New'       : sinusoidal_gradient_new,
     'Cosine Gradient New'            : cosine_gradient_new,
@@ -215,19 +210,19 @@ def main():
     parser.add_argument('--count',      type=int,   default=10)
     parser.add_argument('--outprefix',  type=str,   default='gen_gray')
     
-    # Flags for OLD gradient modes (legacy)
-    parser.add_argument('--enable_linear',                 action='store_true', default=False, help='Enable old Linear Gradient')
-    parser.add_argument('--enable_sinusoidal',             action='store_true', default=False, help='Enable old Sinusoidal Gradient')
-    parser.add_argument('--enable_cosine',                 action='store_true', default=False, help='Enable old Cosine Gradient')
-    parser.add_argument('--enable_radial_sinusoidal',      action='store_true', default=False, help='Enable old Radial Sinusoidal Gradient')
-    parser.add_argument('--enable_radial_cosine',          action='store_true', default=False, help='Enable old Radial Cosine Gradient')
+    # Flags for gradient modes (main.py based)
+    parser.add_argument('--enable_linear',                 action='store_true', default=True, help='Enable Linear Gradient (main.py style)')
+    parser.add_argument('--enable_sinusoidal',             action='store_true', default=True, help='Enable Sinusoidal Gradient (main.py style)')
+    parser.add_argument('--enable_cosine',                 action='store_true', default=True, help='Enable Cosine Gradient (main.py style)')
+    parser.add_argument('--enable_radial_sinusoidal',      action='store_true', default=True, help='Enable Radial Sinusoidal Gradient (main.py style)')
+    parser.add_argument('--enable_radial_cosine',          action='store_true', default=True, help='Enable Radial Cosine Gradient (main.py style)')
     
-    # Flags for NEW gradient modes (main.py compatible)
-    parser.add_argument('--enable_linear_new',             action='store_true', default=True, help='Enable new Linear Gradient')
-    parser.add_argument('--enable_sinusoidal_new',         action='store_true', default=True, help='Enable new Sinusoidal Gradient')
-    parser.add_argument('--enable_cosine_new',             action='store_true', default=True, help='Enable new Cosine Gradient')
-    parser.add_argument('--enable_radial_sinusoidal_new',  action='store_true', default=True, help='Enable new Radial Sinusoidal Gradient')
-    parser.add_argument('--enable_radial_cosine_new',      action='store_true', default=True, help='Enable new Radial Cosine Gradient')
+    # Flags for NEW gradient modes (original gs_generator)
+    parser.add_argument('--enable_linear_new',             action='store_true', default=False, help='Enable new Linear Gradient (original gs_generator)')
+    parser.add_argument('--enable_sinusoidal_new',         action='store_true', default=False, help='Enable new Sinusoidal Gradient (original gs_generator)')
+    parser.add_argument('--enable_cosine_new',             action='store_true', default=False, help='Enable new Cosine Gradient (original gs_generator)')
+    parser.add_argument('--enable_radial_sinusoidal_new',  action='store_true', default=False, help='Enable new Radial Sinusoidal Gradient (original gs_generator)')
+    parser.add_argument('--enable_radial_cosine_new',      action='store_true', default=False, help='Enable new Radial Cosine Gradient (original gs_generator)')
     
     # Flags for additional modes
     parser.add_argument('--enable_wave',                   action='store_true', default=True, help='Enable Wave mode')
