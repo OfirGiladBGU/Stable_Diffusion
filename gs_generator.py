@@ -8,21 +8,31 @@ from scipy.ndimage import gaussian_filter
 # === Gradient modes from math-equ-image-demo ===
 
 def linear_gradient(X, Y, params):
-    return np.clip((X + Y) * 0.5 + params.get('offset',0.0), 0.0, 1.0)
+    # Original: (x + y) / 2, already in [0, 1]
+    return np.clip((X + Y) * 0.5 + params.get('offset', 0.0), 0.0, 1.0)
 
 def sinusoidal_gradient(X, Y, params):
-    return 0.5 + 0.5 * np.sin(params['freq'] * (X*X + Y*Y) + params['phase'])
+    # Original: np.sin(10 * (x**2 + y**2)), returns [-1, 1]
+    # For grayscale, normalize to [0, 1]
+    val = np.sin(params['freq'] * (X*X + Y*Y) + params['phase'])
+    return (val + 1.0) * 0.5  # Map [-1, 1] to [0, 1]
 
 def cosine_gradient(X, Y, params):
-    return 0.5 + 0.5 * np.cos(params['freq'] * (X * Y) + params['phase'])
+    # Original: np.cos(10 * (x * y)), returns [-1, 1]
+    val = np.cos(params['freq'] * (X * Y) + params['phase'])
+    return (val + 1.0) * 0.5  # Map [-1, 1] to [0, 1]
 
 def radial_sinusoidal_gradient(X, Y, params):
+    # Original: np.sin(10 * np.sqrt(x**2 + y**2)), returns [-1, 1]
     r = np.sqrt(X*X + Y*Y)
-    return 0.5 + 0.5 * np.sin(params['freq'] * r + params['phase'])
+    val = np.sin(params['freq'] * r + params['phase'])
+    return (val + 1.0) * 0.5  # Map [-1, 1] to [0, 1]
 
 def radial_cosine_gradient(X, Y, params):
+    # Original: np.cos(10 * np.sqrt(x**2 + y**2)), returns [-1, 1]
     r = np.sqrt(X*X + Y*Y)
-    return 0.5 + 0.5 * np.cos(params['freq'] * r + params['phase'])
+    val = np.cos(params['freq'] * r + params['phase'])
+    return (val + 1.0) * 0.5  # Map [-1, 1] to [0, 1]
 
 # === Additional modes (waves, shapes, noise) ===
 
@@ -82,7 +92,8 @@ def pick_random_params(func_name, width, height):
         p['offset'] = random.uniform(-0.2, 0.2)
     elif func_name in ('Sinusoidal Gradient', 'Cosine Gradient',
                        'Radial Sinusoidal Gradient', 'Radial Cosine Gradient'):
-        p['freq']  = random.uniform(2.0, 8.0)
+        # Use fixed freq=10 to match main.py, or allow random variation
+        p['freq']  = 10.0  # Fixed to match main.py (was: random.uniform(2.0, 8.0))
         p['phase'] = random.uniform(0.0, 2*math.pi)
     elif func_name == 'Wave':
         p['freq_x']   = random.uniform(1.0, 4.0)
