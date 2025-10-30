@@ -1,9 +1,11 @@
+import os
 import numpy as np
 from PIL import Image
 import random
 import math
 import argparse
 from scipy.ndimage import gaussian_filter
+
 
 # === Gradient modes from math-equ-image-demo ===
 
@@ -54,6 +56,7 @@ def radial_cosine_gradient_new(X, Y, params):
     r = np.sqrt(X*X + Y*Y)
     return 0.5 + 0.5 * np.cos(params['freq'] * r + params['phase'])
 
+
 # === Additional modes (waves, shapes, noise) ===
 
 def wave_func(X, Y, params):
@@ -76,6 +79,7 @@ def noise_func(X, Y, params):
     val = gaussian_filter(val, sigma=params['noise_blur_sigma'])
     return params['baseline'] + params['amplitude'] * (val - 0.5) * 2.0
 
+
 def combined_shape_func(X, Y, params):
     cx = params['cx']
     cy = params['cy']
@@ -89,6 +93,7 @@ def combined_shape_func(X, Y, params):
     inside_vals  = wave_func(X, Y, params['inside_params'])
     outside_vals = radial_wave_func(X, Y, params['outside_params'])
     return mask * inside_vals + (1.0 - mask) * outside_vals
+
 
 # === Map function names to implementations ===
 
@@ -111,6 +116,7 @@ FUNC_MAP = {
     'Noise'                     : noise_func,
     'Combined Shape'            : combined_shape_func
 }
+
 
 # === Parameter pickers ===
 
@@ -166,6 +172,7 @@ def pick_random_params(func_name, width, height):
         raise ValueError(f"Unknown function name: {func_name}")
     return p
 
+
 # === Generate image ===
 
 def generate_image(width=512, height=512, seed=None, blur_sigma=None, flags=None, freq_override=None):
@@ -199,6 +206,7 @@ def generate_image(width=512, height=512, seed=None, blur_sigma=None, flags=None
     img_uint8 = (val * 255).astype(np.uint8)
     img = Image.fromarray(img_uint8, mode='L')
     return img, func_name, params
+
 
 # === Main execution ===
 
@@ -234,8 +242,11 @@ def main():
     parser.add_argument('--blur_sigma',  type=float, default=None, help='Gaussian blur sigma (default: width * 0.003)')
     parser.add_argument('--freq',        type=float, default=None, help='Override frequency for gradient modes')
     parser.add_argument('--all_modes',   action='store_true', help='Enable ALL modes (old and new)')
+    parser.add_argument('--output_path', type=str, default='gs_output', help='Output directory for generated images')
 
     args = parser.parse_args()
+
+    os.makedirs(args.output_path, exist_ok=True)
 
     # If --all_modes is set, enable everything
     if args.all_modes:
@@ -286,8 +297,10 @@ def main():
         )
         safe_mode = mode.replace(' ', '_')
         fname = f"{args.outprefix}_{safe_mode}_{seed_val}_{i:02d}.png"
-        img.save(fname)
-        print(f"Saved {fname}")
+        save_path = os.path.join(args.output_path, fname)
+        img.save(save_path)
+        print(f"Saved {save_path}")
+
 
 if __name__ == '__main__':
     # https://github.com/OfirGiladBGU/math-equ-image-demo
