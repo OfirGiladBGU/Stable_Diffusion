@@ -245,7 +245,14 @@ class ImageBasedSampler:
             vals = img_arr[y_idx, x_idx]
             # Apply computed background mask: set background pixels to zero density
             vals = torch.where(mask[y_idx, x_idx], torch.tensor(0.0, device=device), vals)
-            return vals  # Return the direct grayscale density (with white threshold applied)
+
+            if density_fn is not None:
+                # Further modulate by user-supplied density function
+                vals = vals * density_fn(U, V)
+            else:
+                 # Return the direct grayscale density (with white threshold applied)
+                 pass
+            return vals
 
         return sample_blue_noise_density(
             res=res,
@@ -476,8 +483,11 @@ def generate_stippling_dataset(
         img_path = os.path.join(output_path,input_base_name)
         cc_lloyd_multires_wrapper(
             base_sampler=base_sampler,
-            density_fn=rho_linear,
-            n_points=4000,
+            density_fn=None,
+            # density_fn=rho_linear,
+            # density_fn=rho_logarithmic_u,
+            # n_points=4000,
+            n_points=6000,
             out_res=512,
             iters_per_level=(9, 1),
             levels=(512, 512),
@@ -613,10 +623,34 @@ if __name__ == "__main__":
     if device == "cuda":
         torch.cuda.manual_seed_all(seed)
 
-    # Define density function
+    ###########################
+    # Define density function #
+    ###########################
     rho_linear = lambda U, V: U
     # rho_vertical_quad = lambda U, V: V**2
     # rho_radial = lambda U, V: (1.0 - torch.sqrt((U-0.5)**2 + (V-0.5)**2) / 0.7071).clamp(min=0.0)
+
+    # def make_log_density(k: float = 10.0, axis: str = 'u'):
+    #     """
+    #     Create a logarithmic density function on [0,1].
+
+    #     rho(U,V) = log1p(k * coord) / log1p(k), where coord is U or V depending on axis.
+    #     - k > 0 controls the curvature (higher k increases contrast near 0).
+    #     - Output is in [0,1] and nonnegative (suitable for the sampler).
+    #     """
+    #     denom = math.log1p(k)
+    #     ax = axis.lower()
+    #     if ax.startswith('u'):
+    #         return lambda U, V: torch.log1p(k * U) / denom
+    #     elif ax.startswith('v'):
+    #         return lambda U, V: torch.log1p(k * V) / denom
+    #     else:
+    #         raise ValueError("axis must be 'u' or 'v'")
+
+    # Logarithmic ramp along U in [0,1]: monotonically increasing but compressed near 0
+    # rho_logarithmic_u(·) = log1p(k * U) / log1p(k), so that rho ∈ [0,1] for U∈[0,1]
+    # Ready-to-use example: logarithmic along U with k=10
+    # rho_logarithmic_u = make_log_density(k=10.0, axis='u')
 
     # example1()
     # example2()
