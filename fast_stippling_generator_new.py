@@ -239,6 +239,13 @@ class ImageBasedSampler:
         # img_arr = img_arr + 0.01
         
         def density_fn_img(U, V):
+            if density_fn is not None:
+                # Further modulate by user-supplied density function
+                U = density_fn(U, V)
+            else:
+                 # Return the direct grayscale density (with white threshold applied)
+                 pass
+            
             x_idx = (U * (res - 1)).clamp(0, res - 1).round().long()
             y_idx = (V * (res - 1)).clamp(0, res - 1).round().long()
             # img_arr is (height, width) = (y, x), so index as [y, x]
@@ -246,12 +253,6 @@ class ImageBasedSampler:
             # Apply computed background mask: set background pixels to zero density
             vals = torch.where(mask[y_idx, x_idx], torch.tensor(0.0, device=device), vals)
 
-            if density_fn is not None:
-                # Further modulate by user-supplied density function
-                vals = vals * density_fn(U, V)
-            else:
-                 # Return the direct grayscale density (with white threshold applied)
-                 pass
             return vals
 
         return sample_blue_noise_density(
