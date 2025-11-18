@@ -11,12 +11,16 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # https://resources.mpi-inf.mpg.de/ProjectiveBlueNoise/ProjectiveBlueNoise.pdf
 
 # https://stackoverflow.com/questions/19867279/how-to-compute-power-spectrum-from-2d-fft
-def log_power_spectrum_2d(numpy_2d: np.ndarray, plot: bool = True) -> np.ndarray:
+def log_power_spectrum_2d(numpy_2d: np.ndarray, epsilon: float = 1.0,
+                          plot: bool = True) -> np.ndarray:
     """
     Compute the log power spectrum of a 2D image array.
     """    
     # Convert the numpy array to a PyTorch tensor
     tensor_2d = torch.from_numpy(numpy_2d).float().to(DEVICE)
+
+    # DC (Direct Current) component removal
+    tensor_2d -= tensor_2d.mean()
 
     # Compute the 2D Fourier Transform
     fourier_image = torch.fft.fft2(tensor_2d)
@@ -28,7 +32,7 @@ def log_power_spectrum_2d(numpy_2d: np.ndarray, plot: bool = True) -> np.ndarray
     power_spectrum = torch.abs(fourier_image) ** 2
 
     # Add a small constant to avoid log(0)
-    log_power_spectrum = torch.log1p(power_spectrum)
+    log_power_spectrum = torch.log(power_spectrum + epsilon)
 
     # Plot the log power spectrum if requested
     if plot:
@@ -43,7 +47,8 @@ def log_power_spectrum_2d(numpy_2d: np.ndarray, plot: bool = True) -> np.ndarray
 
 
 # https://stackoverflow.com/questions/29178635/how-to-calculate-1d-power-spectrum-from-2d-noise-power-spectrum-by-radial-averag
-def radial_profile(numpy_2d: np.ndarray, center: Tuple[int, int]=None, plot: bool = True) -> np.ndarray:
+def radial_profile_2d(numpy_2d: np.ndarray, center: Tuple[int, int]=None, normalize: bool = True,
+                      plot: bool = True) -> np.ndarray:
     """
     Compute the radial profile of a 2D power spectrum.
     """
@@ -54,31 +59,36 @@ def radial_profile(numpy_2d: np.ndarray, center: Tuple[int, int]=None, plot: boo
     
     y, x = np.indices(power_spectrum.shape)
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
-    r = r.astype(np.int16)
+    r = r.astype(np.int32)
 
     tbin = np.bincount(r.ravel(), weights=power_spectrum.ravel())
-    nr = np.bincount(r.ravel())
-    radialprofile = tbin / nr
+    rbin = np.bincount(r.ravel())
+    radial_profile = tbin / rbin
+
+    if normalize:
+        radial_profile = radial_profile / np.max(radial_profile)
 
     if plot:
-        plt.plot(radialprofile)
+        plt.plot(radial_profile)
         plt.title('Radial Profile of Power Spectrum')
         plt.xlabel('Radius')
         plt.ylabel('Average Power')
         plt.show()
     else:
-        return radialprofile
+        return radial_profile
 
 
-def radial_difference(numpy_2d_1: np.ndarray, numpy_2d_2: np.ndarray, plot: bool = True) -> np.ndarray:
+def radial_profiles_difference_2d(numpy_2d_1: np.ndarray, numpy_2d_2: np.ndarray, normalize: bool = True,
+                                  plot: bool = True) -> np.ndarray:
     """
     Compute the absolute difference between two radial profiles.
     """
-    profile1 = radial_profile(numpy_2d_1, plot=False)
-    profile2 = radial_profile(numpy_2d_2, plot=False)
+    radial_profile1 = radial_profile_2d(numpy_2d_1, normalize=normalize, plot=False)
+    radial_profile2 = radial_profile_2d(numpy_2d_2, normalize=normalize, plot=False)
 
-    min_length = min(len(profile1), len(profile2))
-    profile_diff = np.abs(profile1[:min_length] - profile2[:min_length])
+    min_length = min(len(radial_profile1), len(radial_profile2))
+    profile_diff = np.abs(radial_profile1[:min_length] - radial_profile2[:min_length])
+
     if plot:
         plt.plot(profile_diff)
         plt.title('Radial Difference')
@@ -101,11 +111,10 @@ def main():
     # log_power_spectrum_2d(image1_arr, plot=True)
 
     # Plot radial profile
-    # radial_profile(image1_arr, plot=True)
+    # radial_profile_2d(image1_arr, normalize=True, plot=True)
 
     # Difference between two images
-    radial_difference(image1_arr, image2_arr, plot=True)
-
+    radial_profiles_difference_2d(image1_arr, image2_arr, normalize=True, plot=True)
 
 
 if __name__ == "__main__":
