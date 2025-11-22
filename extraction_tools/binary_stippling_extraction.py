@@ -3,8 +3,6 @@ from PIL import Image
 import numpy as np
 from tqdm import tqdm
 
-# Simple recursive inversion script.
-# Edit INPUT_DIR / OUTPUT_DIR / OVERWRITE below as needed.
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"}
 
@@ -46,7 +44,8 @@ def stipple_file(src: Path, dst: Path, threshold: int = 128, option: int = 0, po
     Image.fromarray(result).save(dst)
 
 
-def stipple_folders(input_dir: str, output_dir: str, threshold: int = 128, overwrite: bool = True):
+def stipple_folders(input_dir: str, output_dir: str, overwrite: bool = True,
+                    threshold: int = 128, option: int = 0, point_color: int = 255):
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)
 
@@ -59,17 +58,33 @@ def stipple_folders(input_dir: str, output_dir: str, threshold: int = 128, overw
         dst = output_dir / rel
         if (not overwrite) and dst.exists():
             continue
-        stipple_file(src, dst, threshold)  # let underlying libs raise if issues
+        stipple_file(
+            src=src, 
+            dst=dst, 
+            threshold=threshold, 
+            option=option,
+            point_color=point_color
+        )
 
 
 def main():
     # === Editable configuration ===
-    INPUT_DIR = r"D:\AllProjects\PycharmProjects\Stable_Diffusion\test_stipples\input"
-    OUTPUT_DIR = r"D:\AllProjects\PycharmProjects\Stable_Diffusion\test_stipples\output"
-    THRESHOLD = 128  # Stippling threshold (0-255)
+    INPUT_DIR = fr".\test_stipples\input"
+    OUTPUT_DIR = fr".\test_stipples\output"
     OVERWRITE = True  # Set False to skip if file already exists
+
+    THRESHOLD = 128  # Stippling threshold (0-255)
+    OPTION = 0  # Stippling option (0: simple, 1: NN-based)
+    POINT_COLOR = 255  # Color for stippled points (default 255 for white)
     
-    stipple_folders(INPUT_DIR, OUTPUT_DIR, THRESHOLD, OVERWRITE)
+    stipple_folders(
+        input_dir=INPUT_DIR, 
+        output_dir=OUTPUT_DIR, 
+        overwrite=OVERWRITE, 
+        threshold=THRESHOLD,
+        option=OPTION,
+        point_color=POINT_COLOR
+    )
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ import numpy as np
 import PIL
 import matplotlib.pyplot as plt
 from typing import Tuple
+import pathlib
 
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -10,8 +11,14 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Papers:
 # https://resources.mpi-inf.mpg.de/ProjectiveBlueNoise/ProjectiveBlueNoise.pdf
 
+
+########################
+# Single Image Metrics #
+########################
+
 # https://stackoverflow.com/questions/19867279/how-to-compute-power-spectrum-from-2d-fft
-def log_power_spectrum_2d(numpy_2d: np.ndarray, epsilon: float = 1.0,
+def log_power_spectrum_2d(numpy_2d: np.ndarray, 
+                          epsilon: float = 1.0,
                           plot: bool = True) -> np.ndarray:
     """
     Compute the log power spectrum of a 2D image array.
@@ -47,7 +54,8 @@ def log_power_spectrum_2d(numpy_2d: np.ndarray, epsilon: float = 1.0,
 
 
 # https://stackoverflow.com/questions/29178635/how-to-calculate-1d-power-spectrum-from-2d-noise-power-spectrum-by-radial-averag
-def radial_profile_2d(numpy_2d: np.ndarray, center: Tuple[int, int]=None, normalize: bool = True,
+def radial_profile_2d(numpy_2d: np.ndarray, 
+                      center: Tuple[int, int]=None, normalize: bool = True,
                       plot: bool = True) -> np.ndarray:
     """
     Compute the radial profile of a 2D power spectrum.
@@ -78,7 +86,8 @@ def radial_profile_2d(numpy_2d: np.ndarray, center: Tuple[int, int]=None, normal
         return radial_profile
 
 
-def radial_profiles_difference_2d(numpy_2d_1: np.ndarray, numpy_2d_2: np.ndarray, normalize: bool = True,
+def radial_profiles_difference_2d(numpy_2d_1: np.ndarray, numpy_2d_2: np.ndarray, 
+                                  normalize: bool = True,
                                   plot: bool = True) -> np.ndarray:
     """
     Compute the absolute difference between two radial profiles.
@@ -99,9 +108,10 @@ def radial_profiles_difference_2d(numpy_2d_1: np.ndarray, numpy_2d_2: np.ndarray
         return profile_diff
 
 
-def main():
-    image1_path = r"D:\AllProjects\PycharmProjects\Stable_Diffusion\test_stipples\input\GT.png"
-    image2_path = r"D:\AllProjects\PycharmProjects\Stable_Diffusion\test_stipples\input\PRED.png"
+# Test
+def single_image_metrics():
+    image1_path = fr".\test_stipples\input\GT.png"
+    image2_path = fr".\test_stipples\input\PRED.png"
 
     # Open images
     image1_arr = np.array(PIL.Image.open(image1_path).convert("L"))
@@ -116,6 +126,68 @@ def main():
     # Difference between two images
     radial_profiles_difference_2d(image1_arr, image2_arr, normalize=True, plot=True)
 
+
+##########################
+# Multiple Image Metrics #
+##########################
+
+def mean_radial_profile_difference_2d(numpy_2d_list_1: list, numpy_2d_list_2: list, 
+                                      normalize: bool = True, 
+                                      plot: bool = True) -> np.ndarray:
+    """
+    Compute the mean radial profile difference between two lists of 2D images.
+    """
+    
+    lists_length = min(len(numpy_2d_list_1), len(numpy_2d_list_2))
+    max_length = 0
+    profile_diff_list = []
+    for i in range(lists_length):
+        print(f"Processing image pair {i+1}/{lists_length}")
+        image1_arr = numpy_2d_list_1[i]
+        image2_arr = numpy_2d_list_2[i]
+
+        profile_diff = radial_profiles_difference_2d(image1_arr, image2_arr, normalize=normalize, plot=False)
+        profile_diff_list.append(profile_diff)
+        if len(profile_diff) > max_length:
+            max_length = len(profile_diff)
+
+    padded_profile_diff_list = np.array([np.pad(prof_diff, (0, max_length - len(prof_diff)), 'edge') for prof_diff in profile_diff_list])
+    avg_profile_diff = np.mean(padded_profile_diff_list, axis=0)
+    
+    if plot:
+        plt.plot(avg_profile_diff)
+        plt.title('Radial Difference')
+        plt.xlabel('Radius')
+        plt.ylabel('Absolute Difference')
+        plt.show()
+    else:
+        return avg_profile_diff
+
+
+# Test
+def multi_image_metrics():
+    image_folder_path1 = fr".\test_stipples\IN"
+    image_folder_path2 = fr".\test_stipples\GT"
+
+    image_paths1 = sorted(pathlib.Path(image_folder_path1).glob("*.*"))
+    image_paths2 = sorted(pathlib.Path(image_folder_path2).glob("*.*"))
+
+    image_arr_list1 = []
+    image_arr_list2 = []
+    for i in range(len(image_paths1)):
+        print(f"Processing image pair {i+1}/{len(image_paths1)}")
+        image1_arr = np.array(PIL.Image.open(image_paths1[i]).convert("L"))
+        image2_arr = np.array(PIL.Image.open(image_paths2[i]).convert("L"))
+        image_arr_list1.append(image1_arr)
+        image_arr_list2.append(image2_arr)
+
+    mean_radial_profile_difference_2d(image_arr_list1, image_arr_list2, normalize=True, plot=True)
+
+
+def main():
+    # single_image_metrics()
+    multi_image_metrics()
+    
 
 if __name__ == "__main__":
     main()
