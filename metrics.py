@@ -142,6 +142,7 @@ def mean_radial_profile_difference_2d(numpy_2d_list_1: list, numpy_2d_list_2: li
     lists_length = min(len(numpy_2d_list_1), len(numpy_2d_list_2))
     max_length = 0
     profile_diff_list = []
+    print(f"Computing radial profile differences for {lists_length} image pairs...")
     for i in tqdm(range(lists_length)):
         image1_arr = numpy_2d_list_1[i]
         image2_arr = numpy_2d_list_2[i]
@@ -175,8 +176,9 @@ def multi_image_metrics():
     image_arr_list1 = []
     image_arr_list2 = []
     images_count = min(len(image_paths1), len(image_paths2))
-    for i in range(images_count):
-        print(f"Processing image pair {i+1}/{images_count}")
+
+    print(f"Processing {images_count} image pairs...")
+    for i in tqdm(range(images_count)):
         image1_arr = np.array(PIL.Image.open(image_paths1[i]).convert("L"))
         image2_arr = np.array(PIL.Image.open(image_paths2[i]).convert("L"))
         image_arr_list1.append(image1_arr)
