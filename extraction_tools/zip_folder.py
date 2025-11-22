@@ -60,8 +60,8 @@ def zip_folder(folder_path, output_zip=None, exclude_patterns=None):
                     continue
                 
                 file_path = Path(root) / file
-                # Create archive name relative to the folder being zipped
-                arcname = file_path.relative_to(folder_path.parent)
+                # Use path relative to the folder itself so contents sit at zip root
+                arcname = file_path.relative_to(folder_path)
                 
                 print(f"  Adding: {arcname}")
                 zipf.write(file_path, arcname)
