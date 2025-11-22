@@ -6,6 +6,9 @@ from typing import Tuple
 import pathlib
 from tqdm import tqdm
 
+# NOTE: Do not forget to do the following pre-processing steps:
+# 1. Check that the GT images are binary (0 and 255 values only).
+# 2. Apply Thresholding to the predicted images to convert them to binary as well.
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -168,7 +171,7 @@ def mean_radial_profile_difference_2d(numpy_2d_list_1: list, numpy_2d_list_2: li
 # Test
 def multi_image_metrics():
     image_folder_path1 = fr".\test_stipples\data_grads_v3\source"
-    image_folder_path2 = fr".\test_stipples\data_grads_v3\output_beta"
+    image_folder_path2 = fr".\test_stipples\data_grads_v3\output_beta_stippled"
 
     image_paths1 = sorted(pathlib.Path(image_folder_path1).glob("*.*"))
     image_paths2 = sorted(pathlib.Path(image_folder_path2).glob("*.*"))
