@@ -10,6 +10,11 @@ import argparse
 from typing import Tuple, Optional, List
 import glob
 
+import pathlib
+import sys
+ROOT_DIR = pathlib.Path(__file__).parent.parent.resolve()
+sys.path.append(str(ROOT_DIR))
+
 from regression_model_test.model import ImageToPointSet, normalize_to_pixels
 
 
@@ -289,28 +294,49 @@ def batch_predict(model: ImageToPointSet, image_dir: str, output_dir: str,
     print(f"Results saved to: {output_dir}")
 
 
-def main(args):
+def main():
     # Setup device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}\n")
     
+    # === Editable configuration ===
+    checkpoint = r"./regression_outputs/pointset_regression_20251203_010248/checkpoints/best_model.pth"  # set your checkpoint path
+    # Choose either single image or directory
+    image = None  # e.g., r"./data_grads_v3_sample/source/sample.png" or None
+    image_dir = r"./data_grads_v3_sample/source"  # used for batch mode when image is None
+    output = './regression_outputs/pointset_regression_20251203_010248/predictions'
+    # Model and preprocessing
+    num_points = 5000
+    base_channels = 32
+    latent_dim = 512
+    img_size = 512
+    # Visualization
+    no_show = True
+    point_size = 0.5
+    point_color = 'red'
+    # Outputs control
+    save_stipple = True
+    save_points = True
+    points_format = 'npy'  # 'npy' | 'txt' | 'csv'
+    save_visualizations = True  # batch mode overlays
+    
     # Load model
     model = load_model(
-        args.checkpoint,
-        num_points=args.num_points,
-        base_channels=args.base_channels,
-        latent_dim=args.latent_dim,
+        checkpoint,
+        num_points=num_points,
+        base_channels=base_channels,
+        latent_dim=latent_dim,
         device=device
     )
     
     # Single image or batch prediction
-    if args.image:
+    if image:
         # Single image prediction
-        print(f"\nPredicting points for: {args.image}")
+        print(f"\nPredicting points for: {image}")
         
         points_norm, points_px = predict_points(
-            model, args.image, 
-            img_size=(args.img_size, args.img_size),
+            model, image, 
+            img_size=(img_size, img_size),
             device=device
         )
         
@@ -320,39 +346,39 @@ def main(args):
         
         # Visualize
         output_path = None
-        if args.output:
-            os.makedirs(args.output, exist_ok=True)
-            basename = os.path.splitext(os.path.basename(args.image))[0]
-            output_path = os.path.join(args.output, f"{basename}_prediction.png")
+        if output:
+            os.makedirs(output, exist_ok=True)
+            basename = os.path.splitext(os.path.basename(image))[0]
+            output_path = os.path.join(output, f"{basename}_prediction.png")
         
         visualize_prediction(
-            args.image, points_px, 
+            image, points_px, 
             output_path=output_path,
-            point_size=args.point_size,
-            point_color=args.point_color,
-            show=not args.no_show
+            point_size=point_size,
+            point_color=point_color,
+            show=not no_show
         )
         
         # Save stipple image
-        if args.save_stipple:
-            stipple_img = create_stipple_image(points_px, (args.img_size, args.img_size))
-            stipple_path = os.path.join(args.output, f"{basename}_stipple.png")
+        if save_stipple:
+            stipple_img = create_stipple_image(points_px, (img_size, img_size))
+            stipple_path = os.path.join(output, f"{basename}_stipple.png")
             Image.fromarray(stipple_img).save(stipple_path)
             print(f"Saved stipple image to: {stipple_path}")
         
         # Save points
-        if args.save_points:
-            points_path = os.path.join(args.output, f"{basename}_points.{args.points_format}")
-            save_points(points_px, points_path, args.points_format)
+        if save_points:
+            points_path = os.path.join(output, f"{basename}_points.{points_format}")
+            save_points(points_px, points_path, points_format)
     
-    elif args.image_dir:
+    elif image_dir:
         # Batch prediction
         batch_predict(
-            model, args.image_dir, args.output,
-            img_size=(args.img_size, args.img_size),
-            save_visualizations=args.save_visualizations,
-            save_stipple_images=args.save_stipple,
-            save_points_format=args.points_format if args.save_points else None,
+            model, image_dir, output,
+            img_size=(img_size, img_size),
+            save_visualizations=save_visualizations,
+            save_stipple_images=save_stipple,
+            save_points_format=points_format if save_points else None,
             device=device
         )
     
@@ -361,49 +387,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Predict points from images using trained model")
-    
-    # Input arguments
-    parser.add_argument('--checkpoint', type=str, required=True,
-                       help='Path to model checkpoint (.pth file)')
-    parser.add_argument('--image', type=str, default=None,
-                       help='Path to single input image')
-    parser.add_argument('--image_dir', type=str, default=None,
-                       help='Path to directory containing input images (for batch prediction)')
-    parser.add_argument('--output', type=str, default='./predictions',
-                       help='Output directory for predictions')
-    
-    # Model arguments
-    parser.add_argument('--num_points', type=int, default=5000,
-                       help='Number of points the model predicts')
-    parser.add_argument('--base_channels', type=int, default=32,
-                       help='Base channels in encoder')
-    parser.add_argument('--latent_dim', type=int, default=512,
-                       help='Latent dimension')
-    parser.add_argument('--img_size', type=int, default=512,
-                       help='Image size (assumes square images)')
-    
-    # Visualization arguments
-    parser.add_argument('--no_show', action='store_true',
-                       help='Do not display visualization (only save)')
-    parser.add_argument('--point_size', type=float, default=0.5,
-                       help='Size of points in visualization')
-    parser.add_argument('--point_color', type=str, default='red',
-                       help='Color of points in visualization')
-    
-    # Output arguments
-    parser.add_argument('--save_stipple', action='store_true',
-                       help='Save stipple images (black points on white background)')
-    parser.add_argument('--save_points', action='store_true',
-                       help='Save point coordinates to file')
-    parser.add_argument('--points_format', type=str, default='npy',
-                       choices=['npy', 'txt', 'csv'],
-                       help='Format to save point coordinates')
-    
-    # Batch prediction arguments
-    parser.add_argument('--save_visualizations', action='store_true', default=True,
-                       help='Save visualization overlays (batch mode)')
-    
-    args = parser.parse_args()
-    
-    main(args)
+    main()

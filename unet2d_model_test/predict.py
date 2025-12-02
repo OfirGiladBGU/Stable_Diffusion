@@ -20,9 +20,9 @@ def save_tensor_png(t: torch.Tensor, out_path: Path):
 
 def main():
     # === Editable configuration ===
-    INPUTS_DIR = Path(r".\test_stipples\data_grads_v3_sample\source")
-    CHECKPOINT = Path(r".\unet_2d_outputs\unet2d_epoch_5.pt")
-    OUTPUT_DIR = Path(r".\unet_2d_outputs\predictions")
+    INPUTS_DIR = Path(r"./data_grads_v3_sample/source")
+    CHECKPOINT = Path(r"./unet_2d_outputs/unet2d_epoch_5.pt")
+    OUTPUT_DIR = Path(r"./unet_2d_outputs/predictions")
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     SIZE = (512,512)
 

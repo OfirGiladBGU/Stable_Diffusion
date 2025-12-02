@@ -20,9 +20,9 @@ def main():
         Image.fromarray(arr).save(out_path)
 
     # === Editable configuration ===
-    INPUTS_DIR = r".\test_stipples\data_grads_v3_sample\source"
-    TARGETS_DIR = r".\test_stipples\data_grads_v3_sample\target"
-    OUT_DIR = Path(r".\unet_2d_outputs")
+    INPUTS_DIR = r"/groups/asharf_group/ofirgila/ControlNet/training/data_grads_v3/source"
+    TARGETS_DIR = r"/groups/asharf_group/ofirgila/ControlNet/training/data_grads_v3/target"
+    OUT_DIR = Path(r"./unet_2d_outputs")
     BATCH_SIZE = 4
     LR = 1e-3
     EPOCHS = 5
