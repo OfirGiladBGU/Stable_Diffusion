@@ -34,8 +34,18 @@ def main():
     ds = ImageToImageDataset(INPUTS_DIR, TARGETS_DIR, size=(512,512))
     dl = DataLoader(ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
 
-    # Model
-    model = UNet2D(in_channels=1, out_channels=1, base_ch=64).to(DEVICE)
+    # Model (3DUNet-style 2D config)
+    model = UNet2D(
+        in_channels=1,
+        out_channels=1,
+        fmaps=32,
+        depth=4,
+        norm='batch',
+        activation='relu',
+        dropout=0.0,
+        residual=True,
+        final_activation='sigmoid'
+    ).to(DEVICE)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=LR)
 
