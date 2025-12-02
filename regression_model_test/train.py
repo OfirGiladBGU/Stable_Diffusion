@@ -16,7 +16,7 @@ except ImportError:
     TENSORBOARD_AVAILABLE = False
     SummaryWriter = None
 
-from regression_model import ImageToPointSet
+from regression_model_test.model import ImageToPointSet
 from dataset import PointSetDataset, collate_fn_fixed_size
 
 

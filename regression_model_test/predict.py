@@ -10,7 +10,7 @@ import argparse
 from typing import Tuple, Optional, List
 import glob
 
-from regression_model import ImageToPointSet, normalize_to_pixels
+from regression_model_test.model import ImageToPointSet, normalize_to_pixels
 
 
 def load_model(checkpoint_path: str, num_points: int = 5000, 
